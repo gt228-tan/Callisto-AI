@@ -7,6 +7,7 @@ import { AIProgressSteps } from '@/components/ui/States'
 import { leads, type Lead } from '@/data/leads'
 import { discoverLeads } from '@/services/aiService'
 import { useToast } from '@/contexts/ToastContext'
+import { exportToCSV } from '@/lib/exportCsv'
 import { formatDateTime, timeAgo } from '@/lib/utils'
 
 const INDUSTRIES = ['All','IT Services','FinTech','SaaS','Healthcare','Manufacturing','Retail','Education','Insurance','Logistics','Real Estate']
@@ -164,7 +165,22 @@ export function LeadDiscovery() {
               <span className="text-2xs text-text-muted">{filtered.filter(l => l.intent === 'HIGH').length} high intent</span>
             </div>
             <div className="flex gap-2">
-              <button className="btn-secondary text-2xs">Export CSV</button>
+              <button onClick={() => {
+                exportToCSV('discovered_prospects.csv', filtered, [
+                  { key: 'name', label: 'Name' },
+                  { key: 'company', label: 'Company' },
+                  { key: 'jobTitle', label: 'Job Title' },
+                  { key: 'industry', label: 'Industry' },
+                  { key: 'location', label: 'Location' },
+                  { key: 'intentScore', label: 'AI Intent Score' },
+                  { key: 'intent', label: 'Intent Level' },
+                  { key: 'source', label: 'Source' },
+                  { key: 'requirement', label: 'Requirement Summary' },
+                  { key: 'email', label: 'Email' },
+                  { key: 'phone', label: 'Phone' },
+                ])
+                showToast('success', 'Export Complete', `${filtered.length} discovered prospects exported to CSV`)
+              }} className="btn-secondary text-2xs">Export CSV</button>
               <button className="btn-primary text-2xs">Add to Campaign</button>
             </div>
           </div>

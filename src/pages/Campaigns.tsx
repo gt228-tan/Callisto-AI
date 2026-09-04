@@ -1,18 +1,20 @@
 import { useState } from 'react'
-import { Megaphone, Plus, Pause, Play, Eye, BarChart2, X, Check } from 'lucide-react'
+import { Megaphone, Plus, Pause, Play, Eye, BarChart2, X, Check, Download } from 'lucide-react'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { MetricCard } from '@/components/ui/MetricCard'
 import { campaignStatusBadge } from '@/components/ui/StatusBadge'
-import { campaigns, type Campaign } from '@/data/campaigns'
+import { type Campaign } from '@/data/campaigns'
 import { leads, type Lead } from '@/data/leads'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
+import { useCampaigns } from '@/contexts/CampaignContext'
+import { exportToCSV } from '@/lib/exportCsv'
 
 const WIZARD_STEPS = ['Campaign Details','Select Leads','Voice Agent','Objectives','Schedule','Review & Launch']
 
 export function Campaigns() {
   const { showToast } = useToast()
-  const [campaignList, setCampaignList] = useState(campaigns)
+  const { campaignList, addCampaign, togglePause: togglePauseCampaign } = useCampaigns()
   const [showWizard, setShowWizard] = useState(false)
   const [wizardStep, setWizardStep]   = useState(0)
   const [wizardData, setWizardData]   = useState({
@@ -31,16 +33,13 @@ export function Campaigns() {
     : '0'
 
   function togglePause(id: string) {
-    setCampaignList(prev => prev.map(c =>
-      c.id === id ? { ...c, status: c.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' } : c
-    ))
     const camp = campaignList.find(c => c.id === id)
+    togglePauseCampaign(id)
     showToast('info', camp?.status === 'ACTIVE' ? 'Campaign Paused' : 'Campaign Resumed', camp?.name ?? '')
   }
 
   function launchCampaign() {
-    const newCamp: Campaign = {
-      id: `C00${campaignList.length + 1}`,
+    const newCamp = addCampaign({
       name: wizardData.name || 'New AI Campaign',
       target: wizardData.target || 'Selected Leads',
       agent: `${wizardData.voice} Agent`,
@@ -48,19 +47,15 @@ export function Campaigns() {
       language: wizardData.language,
       voice: wizardData.voice,
       tone: wizardData.tone,
-      leads: Math.floor(Math.random() * 100) + 20,
-      calls: 0, answered: 0, qualified: 0, meetings: 0, conversion: 0,
-      createdAt: new Date(),
-      scheduledAt: new Date(),
-      completedAt: null,
       objective: wizardData.objective,
       greeting: wizardData.greeting,
-      maxRetries: 3,
-      retryInterval: '24 hours',
-    }
-    setCampaignList(prev => [newCamp, ...prev])
+    })
     setShowWizard(false)
     setWizardStep(0)
+    setWizardData({
+      name: '', target: '', language: 'English', voice: 'Professional Female',
+      tone: 'Consultative', objective: '', greeting: '',
+    })
     showToast('success', 'Campaign Launched!', `"${newCamp.name}" is now active`)
   }
 
@@ -89,6 +84,25 @@ export function Campaigns() {
     )},
   ]
 
+  function handleExportCampaigns() {
+    exportToCSV('campaigns_export.csv', campaignList, [
+      { key: 'name', label: 'Campaign Name' },
+      { key: 'target', label: 'Target Audience' },
+      { key: 'agent', label: 'AI Voice Agent' },
+      { key: 'status', label: 'Status' },
+      { key: 'language', label: 'Language' },
+      { key: 'voice', label: 'Voice Profile' },
+      { key: 'leads', label: 'Total Leads' },
+      { key: 'calls', label: 'Calls Made' },
+      { key: 'answered', label: 'Answered' },
+      { key: 'qualified', label: 'Qualified' },
+      { key: 'meetings', label: 'Meetings Booked' },
+      { key: 'conversion', label: 'Conversion %' },
+      { key: 'createdAt', label: 'Created At' },
+    ])
+    showToast('success', 'Export Complete', `${campaignList.length} campaigns exported to CSV`)
+  }
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -96,9 +110,14 @@ export function Campaigns() {
           <Megaphone className="w-4 h-4 text-amber-400" />
           <h1 className="text-sm font-bold text-text-primary">Campaigns</h1>
         </div>
-        <button onClick={() => setShowWizard(true)} className="btn-primary text-xs gap-1.5">
-          <Plus className="w-3.5 h-3.5" /> Create Campaign
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleExportCampaigns} className="btn-secondary text-xs gap-1.5">
+            <Download className="w-3.5 h-3.5" /> Export CSV
+          </button>
+          <button onClick={() => setShowWizard(true)} className="btn-primary text-xs gap-1.5">
+            <Plus className="w-3.5 h-3.5" /> Create Campaign
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">

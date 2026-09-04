@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link2, CheckCircle, XCircle, RefreshCw, Settings, Upload, Download } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
+import { leads } from '@/data/leads'
+import { exportToCSV } from '@/lib/exportCsv'
 
 const crms = [
   { id: 'salesforce', name: 'Salesforce', desc: 'CRM & Sales Cloud integration', logo: '⚡', status: 'CONNECTED' as const, lastSync: '2m ago', records: 234 },
@@ -25,18 +27,50 @@ export function CRM() {
   })
   const [showImport, setShowImport] = useState(false)
 
+  function handleExportAllLeads(filterType?: string) {
+    let data = leads
+    let filename = 'crm_leads_export.csv'
+
+    if (filterType === 'High Intent Leads (CSV)') {
+      data = leads.filter(l => l.intent === 'HIGH')
+      filename = 'crm_high_intent_leads.csv'
+    } else if (filterType === 'Qualified Leads (Excel)' || filterType === 'Qualified') {
+      data = leads.filter(l => l.status === 'QUALIFIED')
+      filename = 'crm_qualified_leads.csv'
+    } else if (filterType === 'Campaign Leads (CSV)') {
+      data = leads.filter(l => l.status === 'INTERESTED' || l.status === 'CONTACTED')
+      filename = 'crm_campaign_leads.csv'
+    }
+
+    exportToCSV(filename, data, [
+      { key: 'name', label: 'Contact Name' },
+      { key: 'company', label: 'Company' },
+      { key: 'email', label: 'Email Address' },
+      { key: 'phone', label: 'Phone Number' },
+      { key: 'industry', label: 'Industry' },
+      { key: 'location', label: 'Location' },
+      { key: 'status', label: 'CRM Status' },
+      { key: 'intentScore', label: 'Lead Score' },
+    ])
+    showToast('success', 'Export Complete', `${data.length} CRM records exported to CSV`)
+  }
+
   function handleConnect(id: string) {
-    setStatuses(s => ({...s, [id]: 'SYNCING'}))
+    setStatuses(p => ({ ...p, [id]: 'SYNCING' }))
+    showToast('info', 'Connecting...', `Initiating OAuth handshake with ${id}`)
     setTimeout(() => {
-      setStatuses(s => ({...s, [id]: 'CONNECTED'}))
-      showToast('success', 'CRM Connected', `${crms.find(c=>c.id===id)?.name} connected successfully`)
+      setStatuses(p => ({ ...p, [id]: 'CONNECTED' }))
+      showToast('success', 'Connected!', `Successfully integrated ${id}`)
     }, 2000)
   }
 
   function handleSync(id: string) {
-    showToast('info', 'Sync Started', `Syncing ${crms.find(c=>c.id===id)?.name}...`)
-    setStatuses(s => ({...s, [id]: 'SYNCING'}))
-    setTimeout(() => { setStatuses(s => ({...s, [id]: 'CONNECTED'})); showToast('success','Sync Complete',`Records updated`) }, 2000)
+    setStatuses(p => ({ ...p, [id]: 'SYNCING' }))
+    showToast('info', 'Sync Started', `Syncing records with ${id}...`)
+    setTimeout(() => {
+      setStatuses(p => ({ ...p, [id]: 'CONNECTED' }))
+      showToast('success', 'Sync Complete', `All records up to date with ${id}`)
+    }, 1800)
   }
 
   return (
@@ -50,7 +84,7 @@ export function CRM() {
           <button onClick={() => setShowImport(true)} className="btn-secondary text-xs gap-1.5">
             <Upload className="w-3.5 h-3.5" /> Import Leads
           </button>
-          <button onClick={() => showToast('success','Export Complete','Leads exported to CSV')} className="btn-secondary text-xs gap-1.5">
+          <button onClick={() => handleExportAllLeads()} className="btn-secondary text-xs gap-1.5">
             <Download className="w-3.5 h-3.5" /> Export Leads
           </button>
         </div>
@@ -123,7 +157,7 @@ export function CRM() {
                   <div className="text-xs text-text-primary">{e.label}</div>
                   <div className="text-2xs text-text-muted">{e.count} records</div>
                 </div>
-                <button onClick={() => showToast('success','Export Started',`Downloading ${e.label}`)} className="btn-secondary text-2xs py-1 px-2">
+                <button onClick={() => handleExportAllLeads(e.label)} className="btn-secondary text-2xs py-1 px-2">
                   <Download className="w-3 h-3" />
                 </button>
               </div>

@@ -6,6 +6,7 @@ import { intentBadge, leadStatusBadge } from '@/components/ui/StatusBadge'
 import { leads, type Lead, type LeadStatus, type IntentLevel } from '@/data/leads'
 import { formatDate, timeAgo } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
+import { exportToCSV } from '@/lib/exportCsv'
 import { LeadDrawer } from './LeadDiscovery'
 
 const ALL_INDUSTRIES = ['All', ...Array.from(new Set(leads.map(l => l.industry))).sort()]
@@ -52,14 +53,24 @@ export function Leads() {
   ]
 
   function handleExport() {
-    const csv = [
-      ['Name','Company','Industry','Location','Intent Score','Intent','Source','Status','Email','Phone'],
-      ...leads.map(l => [l.name,l.company,l.industry,l.location,l.intentScore,l.intent,l.source,l.status,l.email,l.phone])
-    ].map(r => r.join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'leads_export.csv'; a.click()
-    showToast('success', 'Export Complete', `${leads.length} leads exported to CSV`)
+    const targetLeads = selectedIds.size > 0
+      ? filtered.filter(l => selectedIds.has(l.id))
+      : filtered
+    exportToCSV('leads_export.csv', targetLeads, [
+      { key: 'name', label: 'Name' },
+      { key: 'company', label: 'Company' },
+      { key: 'jobTitle', label: 'Job Title' },
+      { key: 'industry', label: 'Industry' },
+      { key: 'location', label: 'Location' },
+      { key: 'intentScore', label: 'Intent Score' },
+      { key: 'intent', label: 'Intent Level' },
+      { key: 'source', label: 'Source' },
+      { key: 'status', label: 'Status' },
+      { key: 'email', label: 'Email' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'nextAction', label: 'Next Action' },
+    ])
+    showToast('success', 'Export Complete', `${targetLeads.length} leads exported to CSV`)
   }
 
   function clearFilters() {

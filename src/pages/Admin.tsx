@@ -1,11 +1,12 @@
 // Admin pages - all in one file for speed
 import { useState } from 'react'
-import { Shield, UserCog, CreditCard, Volume2, Receipt, ScrollText, AlertTriangle, Activity, Sliders, CheckCircle, XCircle, Clock, AlertOctagon } from 'lucide-react'
+import { Shield, UserCog, CreditCard, Volume2, Receipt, ScrollText, AlertTriangle, Activity, Sliders, CheckCircle, XCircle, Clock, AlertOctagon, Download } from 'lucide-react'
 import { MetricCard } from '@/components/ui/MetricCard'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { adminUsers, auditLogs, fraudAlerts, type AdminUser, type AuditLog } from '@/data/users'
 import { formatDate, formatDateTime, formatDuration } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
+import { exportToCSV } from '@/lib/exportCsv'
 import { campaigns } from '@/data/campaigns'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar } from 'recharts'
 
@@ -139,6 +140,23 @@ export function AdminUsers() {
     )},
   ]
 
+  function handleExportUsers() {
+    exportToCSV('admin_users_export.csv', users, [
+      { key: 'id', label: 'User ID' },
+      { key: 'name', label: 'Name' },
+      { key: 'email', label: 'Email' },
+      { key: 'company', label: 'Company' },
+      { key: 'role', label: 'Role' },
+      { key: 'plan', label: 'Plan' },
+      { key: 'status', label: 'Status' },
+      { key: 'voiceUsed', label: 'Voice Used (mins)' },
+      { key: 'voiceLimit', label: 'Voice Limit' },
+      { key: 'apiCalls', label: 'API Calls' },
+      { key: 'lastActive', label: 'Last Active' },
+    ])
+    showToast('success', 'Export Complete', `${users.length} user records exported to CSV`)
+  }
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -147,7 +165,12 @@ export function AdminUsers() {
           <h1 className="text-sm font-bold text-text-primary">User Management</h1>
           <span className="badge-blue">ADMIN</span>
         </div>
-        <button onClick={() => showToast('info','Invite Sent','User invite email sent')} className="btn-primary text-xs">+ Invite User</button>
+        <div className="flex gap-2">
+          <button onClick={handleExportUsers} className="btn-secondary text-xs gap-1.5">
+            <Download className="w-3.5 h-3.5" /> Export CSV
+          </button>
+          <button onClick={() => showToast('info','Invite Sent','User invite email sent')} className="btn-primary text-xs">+ Invite User</button>
+        </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="Total Users"    value={users.length} />
@@ -166,7 +189,23 @@ export function AdminUsers() {
 // Audit Logs
 // ============================================================
 export function AdminAuditLogs() {
+  const { showToast } = useToast()
   const statusIcon = (s: string) => s === 'SUCCESS' ? <CheckCircle className="w-3 h-3 text-success" /> : s === 'FAILED' ? <XCircle className="w-3 h-3 text-danger-bright" /> : <AlertOctagon className="w-3 h-3 text-warning" />
+
+  function handleExportAuditLogs() {
+    exportToCSV('audit_logs.csv', auditLogs, [
+      { key: 'id', label: 'Log ID' },
+      { key: 'timestamp', label: 'Timestamp' },
+      { key: 'user', label: 'User' },
+      { key: 'userEmail', label: 'User Email' },
+      { key: 'action', label: 'Action' },
+      { key: 'resource', label: 'Resource' },
+      { key: 'ip', label: 'IP Address' },
+      { key: 'status', label: 'Status' },
+      { key: 'details', label: 'Details' },
+    ])
+    showToast('success', 'Export Complete', `${auditLogs.length} audit log entries exported to CSV`)
+  }
 
   const columns: Column<AuditLog>[] = [
     { key: 'timestamp', header: 'Timestamp', sortable: true, render: r => <span className="text-2xs font-mono text-text-muted">{formatDateTime(r.timestamp)}</span> },
@@ -180,10 +219,15 @@ export function AdminAuditLogs() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center gap-2">
-        <ScrollText className="w-4 h-4 text-blue-400" />
-        <h1 className="text-sm font-bold text-text-primary">Audit Logs</h1>
-        <span className="badge-blue">ADMIN</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ScrollText className="w-4 h-4 text-blue-400" />
+          <h1 className="text-sm font-bold text-text-primary">Audit Logs</h1>
+          <span className="badge-blue">ADMIN</span>
+        </div>
+        <button onClick={handleExportAuditLogs} className="btn-secondary text-xs gap-1.5">
+          <Download className="w-3.5 h-3.5" /> Export CSV
+        </button>
       </div>
       <div className="panel flex flex-col">
         <DataTable data={auditLogs} columns={columns} keyExtractor={r => r.id} pageSize={15} searchable searchPlaceholder="Search logs..." searchKeys={['user','action','resource','ip']} />

@@ -4,9 +4,27 @@ import { outcomeBadge } from '@/components/ui/StatusBadge'
 import { calls, type Call } from '@/data/calls'
 import { formatDateTime, formatDuration, formatTimestamp } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
+import { exportToCSV } from '@/lib/exportCsv'
 
 export function CallHistory() {
   const { showToast } = useToast()
+
+  function handleExportCalls() {
+    exportToCSV('call_history.csv', calls, [
+      { key: 'prospect', label: 'Prospect' },
+      { key: 'company', label: 'Company' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'agent', label: 'Agent' },
+      { key: 'duration', label: 'Duration (s)' },
+      { key: 'outcome', label: 'Outcome' },
+      { key: 'sentiment', label: 'Sentiment' },
+      { key: 'intent', label: 'Intent' },
+      { key: 'qualification', label: 'Qualification' },
+      { key: 'summary', label: 'AI Call Summary' },
+      { key: 'timestamp', label: 'Timestamp' },
+    ])
+    showToast('success', 'Export Complete', `${calls.length} call logs exported to CSV`)
+  }
 
   const columns: Column<Call>[] = [
     { key: 'timestamp',     header: 'Timestamp',     sortable: true, render: r => <span className="font-mono text-2xs text-text-muted">{formatDateTime(r.timestamp)}</span> },
@@ -42,7 +60,7 @@ export function CallHistory() {
           <h1 className="text-sm font-bold text-text-primary">Call History</h1>
           <span className="text-2xs text-text-muted">({calls.length} calls)</span>
         </div>
-        <button onClick={() => showToast('success','Export Complete',`${calls.length} calls exported to CSV`)} className="btn-secondary text-xs gap-1.5">
+        <button onClick={handleExportCalls} className="btn-secondary text-xs gap-1.5">
           <Download className="w-3.5 h-3.5" /> Export CSV
         </button>
       </div>
