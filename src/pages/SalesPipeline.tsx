@@ -41,7 +41,13 @@ export function SalesPipeline() {
   const [dragging, setDragging] = useState<{ leadId: string; fromStage: PipelineStage } | null>(null)
   const [dragOver, setDragOver] = useState<PipelineStage | null>(null)
 
+  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({})
+
   const totalValue = (pipeline['OPPORTUNITY']?.length ?? 0) * 850000 + (pipeline['WON']?.length ?? 0) * 1200000
+
+  const toggleExpand = (stageId: string) => {
+    setExpandedStages(prev => ({ ...prev, [stageId]: !prev[stageId] }))
+  }
 
   function onDrop(toStage: PipelineStage) {
     if (!dragging) return
@@ -89,50 +95,59 @@ export function SalesPipeline() {
 
       {/* Kanban Board */}
       <div className="flex gap-3 overflow-x-auto pb-4">
-        {stages.map(stage => (
-          <div key={stage.id}
-            className={`kanban-column shrink-0 transition-colors ${dragOver === stage.id ? 'bg-bg-hover rounded' : ''}`}
-            onDragOver={e => { e.preventDefault(); setDragOver(stage.id) }}
-            onDragLeave={() => setDragOver(null)}
-            onDrop={() => onDrop(stage.id)}>
-            {/* Column header */}
-            <div className={`panel border-t-2 ${stage.color} px-3 py-2 flex items-center justify-between`}>
-              <span className="text-2xs font-semibold text-text-secondary uppercase tracking-wide">{stage.label}</span>
-              <span className="text-2xs font-mono text-text-muted bg-bg-border px-1.5 rounded">{pipeline[stage.id]?.length ?? 0}</span>
-            </div>
+        {stages.map(stage => {
+          const stageLeads = pipeline[stage.id] ?? []
+          const isExpanded = !!expandedStages[stage.id]
+          const displayedLeads = isExpanded ? stageLeads : stageLeads.slice(0, 6)
+          return (
+            <div key={stage.id}
+              className={`kanban-column shrink-0 transition-colors ${dragOver === stage.id ? 'bg-bg-hover rounded' : ''}`}
+              onDragOver={e => { e.preventDefault(); setDragOver(stage.id) }}
+              onDragLeave={() => setDragOver(null)}
+              onDrop={() => onDrop(stage.id)}>
+              {/* Column header */}
+              <div className={`panel border-t-2 ${stage.color} px-3 py-2 flex items-center justify-between`}>
+                <span className="text-2xs font-semibold text-text-secondary uppercase tracking-wide">{stage.label}</span>
+                <span className="text-2xs font-mono text-text-muted bg-bg-border px-1.5 rounded">{stageLeads.length}</span>
+              </div>
 
-            {/* Cards */}
-            <div className="space-y-2 min-h-32">
-              {(pipeline[stage.id] ?? []).slice(0, 6).map(lead => (
-                <div key={lead.id}
-                  draggable
-                  onDragStart={() => setDragging({ leadId: lead.id, fromStage: stage.id })}
-                  onDragEnd={() => { setDragging(null); setDragOver(null) }}
-                  className={`kanban-card cursor-grab active:cursor-grabbing ${dragging?.leadId === lead.id ? 'opacity-40' : ''}`}>
-                  <div className="flex items-start justify-between gap-1">
-                    <div>
-                      <div className="text-xs font-semibold text-text-primary leading-tight">{lead.name}</div>
-                      <div className="text-2xs text-text-muted">{lead.company}</div>
+              {/* Cards */}
+              <div className="space-y-2 min-h-32">
+                {displayedLeads.map(lead => (
+                  <div key={lead.id}
+                    draggable
+                    onDragStart={() => setDragging({ leadId: lead.id, fromStage: stage.id })}
+                    onDragEnd={() => { setDragging(null); setDragOver(null) }}
+                    className={`kanban-card cursor-grab active:cursor-grabbing ${dragging?.leadId === lead.id ? 'opacity-40' : ''}`}>
+                    <div className="flex items-start justify-between gap-1">
+                      <div>
+                        <div className="text-xs font-semibold text-text-primary leading-tight">{lead.name}</div>
+                        <div className="text-2xs text-text-muted">{lead.company}</div>
+                      </div>
+                      <GripVertical className="w-3 h-3 text-text-muted shrink-0 mt-0.5" />
                     </div>
-                    <GripVertical className="w-3 h-3 text-text-muted shrink-0 mt-0.5" />
+                    <div className="flex items-center justify-between mt-2">
+                      {intentBadge(lead.intent)}
+                      <span className="text-2xs font-mono text-amber-400">{lead.intentScore}</span>
+                    </div>
+                    <div className="text-2xs text-text-muted mt-1">{lead.source}</div>
+                    <div className="text-2xs text-text-muted">{timeAgo(lead.lastActivity)}</div>
+                    <div className="text-2xs text-info-bright mt-1">→ {lead.nextAction}</div>
                   </div>
-                  <div className="flex items-center justify-between mt-2">
-                    {intentBadge(lead.intent)}
-                    <span className="text-2xs font-mono text-amber-400">{lead.intentScore}</span>
-                  </div>
-                  <div className="text-2xs text-text-muted mt-1">{lead.source}</div>
-                  <div className="text-2xs text-text-muted">{timeAgo(lead.lastActivity)}</div>
-                  <div className="text-2xs text-info-bright mt-1">→ {lead.nextAction}</div>
-                </div>
-              ))}
-              {(pipeline[stage.id] ?? []).length > 6 && (
-                <div className="text-2xs text-center text-text-muted py-2">
-                  +{(pipeline[stage.id] ?? []).length - 6} more
-                </div>
-              )}
+                ))}
+                {stageLeads.length > 6 && (
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(stage.id)}
+                    className="w-full text-2xs text-center text-amber-400 hover:text-amber-300 bg-bg-card hover:bg-bg-hover py-1.5 px-2 rounded border border-bg-border hover:border-amber-500/30 transition-colors font-medium cursor-pointer"
+                  >
+                    {isExpanded ? '▲ Show less' : `+${stageLeads.length - 6} more (Show all)`}
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

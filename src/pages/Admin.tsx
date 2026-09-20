@@ -1,6 +1,6 @@
 // Admin pages - all in one file for speed
 import { useState } from 'react'
-import { Shield, UserCog, CreditCard, Volume2, Receipt, ScrollText, AlertTriangle, Activity, Sliders, CheckCircle, XCircle, Clock, AlertOctagon, Download } from 'lucide-react'
+import { Shield, UserCog, CreditCard, Volume2, Receipt, ScrollText, AlertTriangle, Activity, Sliders, CheckCircle, XCircle, Clock, AlertOctagon, Download, FileText, Check, X, ExternalLink, Search, Sparkles, Filter } from 'lucide-react'
 import { MetricCard } from '@/components/ui/MetricCard'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { adminUsers, auditLogs, fraudAlerts, type AdminUser, type AuditLog } from '@/data/users'
@@ -547,6 +547,392 @@ export function AdminPlatformSettings() {
         ))}
         <button onClick={() => showToast('success','Settings Saved','Platform settings updated')} className="btn-primary text-xs">Save Platform Settings</button>
       </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Product AI Suitability Approvals (User Journey Step 6)
+// ============================================================
+export interface ProductApprovalItem {
+  id: string
+  company: string
+  productName: string
+  industry: string
+  category: string
+  submittedAt: Date
+  suitabilityScore: number
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  riskFlags: string[]
+  catalogDoc: string
+  description: string
+  targetMarket: string
+  reviewerNotes?: string
+}
+
+const initialProductApprovals: ProductApprovalItem[] = [
+  {
+    id: 'PRD-101',
+    company: 'FinTech Matrix Labs',
+    productName: 'Algorithmic Crypto Trading Bot',
+    industry: 'Financial Technology',
+    category: 'SaaS Software',
+    submittedAt: new Date(Date.now() - 3 * 3600000),
+    suitabilityScore: 48,
+    riskLevel: 'HIGH',
+    status: 'PENDING',
+    riskFlags: ['High-risk financial investment solicitation', 'SEC/regulatory compliance disclaimer required', 'Price guarantee assertions'],
+    catalogDoc: 'Matrix_Crypto_Bot_Whitepaper_v2.pdf',
+    description: 'Autonomous trading algorithms offering high-yield liquidity management for retail and hedge funds.',
+    targetMarket: 'Retail traders, Family offices, Crypto investment funds',
+    reviewerNotes: 'Automated scan flagged potential financial non-compliance. Human compliance sign-off required before AI calling allowed.',
+  },
+  {
+    id: 'PRD-102',
+    company: 'BioHealth Analytics',
+    productName: 'AI Radiology Diagnostic Assist',
+    industry: 'Healthcare & Life Sciences',
+    category: 'Medical Device Software',
+    submittedAt: new Date(Date.now() - 14 * 3600000),
+    suitabilityScore: 64,
+    riskLevel: 'MEDIUM',
+    status: 'PENDING',
+    riskFlags: ['Requires HIPAA compliance disclosure', 'Must clarify non-diagnostic assistive nature'],
+    catalogDoc: 'BioHealth_Clinical_Brochure.pdf',
+    description: 'Deep learning imaging pipeline aiding hospital radiologists in CT scan anomaly triage.',
+    targetMarket: 'Hospital networks, Private diagnostic clinics, Radiology labs',
+    reviewerNotes: 'Inconclusive rating due to medical claims. Approved pending script constraint that AI Voice Agent states it is for physician triage only.',
+  },
+  {
+    id: 'PRD-103',
+    company: 'Acme Digital Solutions',
+    productName: 'Enterprise Cloud Migration Suite',
+    industry: 'IT & Cloud Services',
+    category: 'Consulting & Implementation',
+    submittedAt: new Date(Date.now() - 28 * 3600000),
+    suitabilityScore: 95,
+    riskLevel: 'LOW',
+    status: 'APPROVED',
+    riskFlags: ['None - standard B2B enterprise service'],
+    catalogDoc: 'Acme_Cloud_Migration_Framework.pdf',
+    description: 'End-to-end workload migration from on-premise VMware to AWS and Microsoft Azure.',
+    targetMarket: 'Mid-market to Enterprise CTOs, Heads of Infrastructure',
+    reviewerNotes: 'Fully compliant with autonomous outbound B2B voice selling guidelines.',
+  },
+  {
+    id: 'PRD-104',
+    company: 'Nexus Software Group',
+    productName: 'B2B Customer Support AI Voicebot',
+    industry: 'Enterprise SaaS',
+    category: 'Customer Experience Software',
+    submittedAt: new Date(Date.now() - 48 * 3600000),
+    suitabilityScore: 98,
+    riskLevel: 'LOW',
+    status: 'APPROVED',
+    riskFlags: ['None - standard customer support product'],
+    catalogDoc: 'Nexus_Voice_Spec_Sheet.pdf',
+    description: 'Voice AI agents that handle Tier-1 incoming support queries and CRM ticket logging.',
+    targetMarket: 'E-commerce, Telecom, SaaS support directors',
+    reviewerNotes: 'Approved for automated voice outreach across all global regions.',
+  },
+  {
+    id: 'PRD-105',
+    company: 'Apex Capital Partners',
+    productName: 'Pre-IPO Secondary Share Syndication',
+    industry: 'Investment Banking',
+    category: 'Financial Securities',
+    submittedAt: new Date(Date.now() - 72 * 3600000),
+    suitabilityScore: 32,
+    riskLevel: 'HIGH',
+    status: 'REJECTED',
+    riskFlags: ['Strict securities solicitation rules (SEC Reg D)', 'Unaccredited investor risk', 'Prohibited for automated cold voice solicitation'],
+    catalogDoc: 'Apex_Secondary_Offering_Memo.pdf',
+    description: 'Cold outreach offering shares in late-stage private unicorns to high-net-worth individuals.',
+    targetMarket: 'HNIs and family office investment managers',
+    reviewerNotes: 'Rejected. Violates telemarketing and financial securities compliance guidelines for autonomous cold calling.',
+  },
+]
+
+export function AdminProductApprovals() {
+  const { showToast } = useToast()
+  const [items, setItems] = useState<ProductApprovalItem[]>(initialProductApprovals)
+  const [selectedItem, setSelectedItem] = useState<ProductApprovalItem | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const filtered = items.filter(item => {
+    if (statusFilter !== 'ALL' && item.status !== statusFilter) return false
+    if (searchQuery && !item.productName.toLowerCase().includes(searchQuery.toLowerCase()) && !item.company.toLowerCase().includes(searchQuery.toLowerCase())) return false
+    return true
+  })
+
+  const pendingCount = items.filter(i => i.status === 'PENDING').length
+  const approvedCount = items.filter(i => i.status === 'APPROVED').length
+  const rejectedCount = items.filter(i => i.status === 'REJECTED').length
+
+  function handleAction(id: string, newStatus: 'APPROVED' | 'REJECTED', notes?: string) {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, status: newStatus, reviewerNotes: notes || item.reviewerNotes } : item))
+    const item = items.find(i => i.id === id)
+    if (newStatus === 'APPROVED') {
+      showToast('success', 'Product Approved for AI Selling', `${item?.productName} by ${item?.company} is now active for AI voice campaigns`)
+    } else {
+      showToast('error', 'Product Disqualified / Rejected', `${item?.productName} has been restricted from AI voice selling`)
+    }
+    if (selectedItem?.id === id) {
+      setSelectedItem(null)
+    }
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-amber-400" />
+          <h1 className="text-sm font-bold text-text-primary">Product AI Suitability Approvals</h1>
+          <span className="badge-blue">JOURNEY STEP 6</span>
+        </div>
+        <div className="text-2xs text-text-muted">
+          AI Validation Engine: <span className="text-success font-medium">Active (Automated Risk Scoring)</span>
+        </div>
+      </div>
+
+      {/* Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <MetricCard label="Pending Approvals" value={pendingCount} accent icon={<Clock className="w-3.5 h-3.5" />} />
+        <MetricCard label="Approved for AI"    value={approvedCount} delta={12.5} icon={<CheckCircle className="w-3.5 h-3.5" />} />
+        <MetricCard label="Restricted / Disqualified" value={rejectedCount} icon={<XCircle className="w-3.5 h-3.5" />} />
+        <MetricCard label="Avg Review Time"   value="1.4h" />
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="panel p-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5">
+          {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setStatusFilter(tab)}
+              className={`px-2.5 py-1 text-xs rounded transition-colors ${statusFilter === tab ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'}`}
+            >
+              {tab === 'ALL' ? 'All Submissions' : tab.charAt(0) + tab.slice(1).toLowerCase()}
+              {tab === 'PENDING' && pendingCount > 0 && (
+                <span className="ml-1.5 px-1 py-0.2 rounded-full text-2xs bg-amber-500/30 text-amber-300 font-mono">{pendingCount}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search company or product..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="input pl-8 text-xs w-64"
+          />
+        </div>
+      </div>
+
+      {/* Review Table */}
+      <div className="panel overflow-hidden">
+        <table className="data-table w-full">
+          <thead>
+            <tr>
+              <th>Company & Product</th>
+              <th>Industry / Category</th>
+              <th>AI Suitability</th>
+              <th>Risk Assessment</th>
+              <th>Catalog Doc</th>
+              <th>Status</th>
+              <th className="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(item => (
+              <tr key={item.id} className="hover:bg-bg-hover transition-colors">
+                <td>
+                  <div>
+                    <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                      {item.productName}
+                    </div>
+                    <div className="text-2xs text-text-muted">{item.company} · ID: {item.id}</div>
+                  </div>
+                </td>
+                <td>
+                  <div className="text-text-secondary text-xs">{item.industry}</div>
+                  <div className="text-2xs text-text-muted">{item.category}</div>
+                </td>
+                <td>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-mono font-bold ${item.suitabilityScore >= 80 ? 'text-success' : item.suitabilityScore >= 60 ? 'text-warning' : 'text-danger-bright'}`}>
+                        {item.suitabilityScore}%
+                      </span>
+                      <span className="text-2xs text-text-muted">viable</span>
+                    </div>
+                    <div className="progress-track w-24">
+                      <div
+                        className={item.suitabilityScore >= 80 ? 'progress-fill-success' : item.suitabilityScore >= 60 ? 'progress-fill-amber' : 'bg-red-500 h-full rounded'}
+                        style={{ width: `${item.suitabilityScore}%` }}
+                      />
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div className="space-y-0.5 max-w-xs">
+                    <span className={`badge text-2xs ${item.riskLevel === 'LOW' ? 'badge-success' : item.riskLevel === 'MEDIUM' ? 'badge-amber' : 'badge-danger'}`}>
+                      {item.riskLevel} RISK
+                    </span>
+                    <div className="text-2xs text-text-muted truncate" title={item.riskFlags.join(', ')}>
+                      {item.riskFlags[0]}
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <span className="flex items-center gap-1 text-2xs text-amber-400 font-mono hover:underline cursor-pointer">
+                    <FileText className="w-3 h-3" /> {item.catalogDoc}
+                  </span>
+                </td>
+                <td>
+                  {item.status === 'APPROVED' && <span className="badge-success">APPROVED</span>}
+                  {item.status === 'PENDING' && <span className="badge-amber animate-pulse">PENDING REVIEW</span>}
+                  {item.status === 'REJECTED' && <span className="badge-danger">RESTRICTED</span>}
+                </td>
+                <td className="text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={() => setSelectedItem(item)}
+                      className="btn-ghost text-2xs"
+                    >
+                      Review Details
+                    </button>
+                    {item.status === 'PENDING' && (
+                      <>
+                        <button
+                          onClick={() => handleAction(item.id, 'APPROVED')}
+                          className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded text-2xs font-semibold transition-colors flex items-center gap-1"
+                          title="Approve for AI Voice Selling"
+                        >
+                          <Check className="w-3 h-3" /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleAction(item.id, 'REJECTED')}
+                          className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded text-2xs font-semibold transition-colors flex items-center gap-1"
+                          title="Reject / Restrict"
+                        >
+                          <X className="w-3 h-3" /> Reject
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Detailed Review Modal / Drawer */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="panel max-w-xl w-full p-6 space-y-4 border border-amber-500/30 shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-bg-border pb-3">
+              <div>
+                <div className="text-base font-bold text-text-primary">{selectedItem.productName}</div>
+                <div className="text-xs text-text-muted">{selectedItem.company} · Submitted {formatDateTime(selectedItem.submittedAt)}</div>
+              </div>
+              <button onClick={() => setSelectedItem(null)} className="text-text-muted hover:text-text-primary">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-bg-card rounded border border-bg-border">
+                <div className="text-text-muted text-2xs uppercase">AI Viability Score</div>
+                <div className="text-xl font-bold font-mono text-amber-400 mt-1">{selectedItem.suitabilityScore}%</div>
+                <div className="text-2xs text-text-secondary mt-1">Autonomous selling suitability</div>
+              </div>
+              <div className="p-3 bg-bg-card rounded border border-bg-border">
+                <div className="text-text-muted text-2xs uppercase">Risk Classification</div>
+                <div className={`text-base font-bold mt-1 ${selectedItem.riskLevel === 'LOW' ? 'text-success' : selectedItem.riskLevel === 'MEDIUM' ? 'text-warning' : 'text-danger-bright'}`}>
+                  {selectedItem.riskLevel} RISK
+                </div>
+                <div className="text-2xs text-text-secondary mt-1">{selectedItem.riskFlags.length} flagged compliance signal(s)</div>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-2xs text-text-muted uppercase font-bold block mb-1">Product Description</label>
+                <div className="p-2.5 bg-bg-card rounded text-text-secondary">{selectedItem.description}</div>
+              </div>
+
+              <div>
+                <label className="text-2xs text-text-muted uppercase font-bold block mb-1">Target Market & Audience</label>
+                <div className="p-2.5 bg-bg-card rounded text-text-secondary">{selectedItem.targetMarket}</div>
+              </div>
+
+              <div>
+                <label className="text-2xs text-text-muted uppercase font-bold block mb-1">Automated AI Risk Signals</label>
+                <div className="space-y-1">
+                  {selectedItem.riskFlags.map((flag, idx) => (
+                    <div key={idx} className="flex items-center gap-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-red-300 text-2xs">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-400" />
+                      <span>{flag}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-2xs text-text-muted uppercase font-bold block mb-1">Uploaded Business Catalog Document</label>
+                <div className="flex items-center justify-between p-2.5 bg-bg-card border border-bg-border rounded">
+                  <span className="flex items-center gap-2 text-text-primary font-mono text-xs">
+                    <FileText className="w-4 h-4 text-amber-400" />
+                    {selectedItem.catalogDoc}
+                  </span>
+                  <button className="btn-ghost text-2xs flex items-center gap-1">
+                    <Download className="w-3 h-3" /> Preview Document
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-2xs text-text-muted uppercase font-bold block mb-1">Reviewer Governance Notes</label>
+                <div className="p-2.5 bg-bg-card rounded text-text-secondary italic">
+                  "{selectedItem.reviewerNotes}"
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-bg-border">
+              <span className="text-2xs text-text-muted">User Journey Step 6: Product AI Suitability Validation</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedItem(null)}
+                  className="btn-secondary text-xs"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => handleAction(selectedItem.id, 'REJECTED')}
+                  className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/40 rounded text-xs font-semibold"
+                >
+                  Restrict / Reject
+                </button>
+                <button
+                  onClick={() => handleAction(selectedItem.id, 'APPROVED')}
+                  className="btn-primary text-xs"
+                >
+                  Approve for AI Outreach
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

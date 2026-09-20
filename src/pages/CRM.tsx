@@ -26,6 +26,11 @@ export function CRM() {
     salesforce: 'CONNECTED', hubspot: 'SYNCING', zoho: 'DISCONNECTED', pipedrive: 'ERROR'
   })
   const [showImport, setShowImport] = useState(false)
+  const [selectedCrmForConfig, setSelectedCrmForConfig] = useState<typeof crms[0] | null>(null)
+  const [crmConfig, setCrmConfig] = useState({
+    syncInterval: '15m',
+    instanceUrl: 'https://nexusai.salesforce.com',
+  })
 
   function handleExportAllLeads(filterType?: string) {
     let data = leads
@@ -118,7 +123,13 @@ export function CRM() {
                     <button onClick={() => handleSync(crm.id)} className="btn-secondary text-xs flex-1 gap-1">
                       <RefreshCw className="w-3 h-3" /> Sync
                     </button>
-                    <button className="btn-ghost p-1.5"><Settings className="w-3.5 h-3.5" /></button>
+                    <button
+                      onClick={() => setSelectedCrmForConfig(crm)}
+                      className="btn-ghost p-1.5 hover:text-amber-400"
+                      title="Configure CRM Settings"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
                   </>
                 )}
               </div>
@@ -184,6 +195,96 @@ export function CRM() {
                 <button onClick={() => { setShowImport(false); showToast('success','Import Complete','120 leads imported successfully') }} className="btn-primary text-xs">
                   Import 120 Leads
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CRM Settings Modal */}
+      {selectedCrmForConfig && (
+        <div className="modal-overlay" onClick={() => setSelectedCrmForConfig(null)}>
+          <div className="modal-panel max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="section-header">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{selectedCrmForConfig.logo}</span>
+                <span className="section-title">{selectedCrmForConfig.name} Configuration</span>
+              </div>
+              <button onClick={() => setSelectedCrmForConfig(null)}><XCircle className="w-4 h-4 text-text-muted" /></button>
+            </div>
+            <div className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Instance / API URL</label>
+                <input
+                  className="input font-mono text-xs"
+                  value={crmConfig.instanceUrl}
+                  onChange={e => setCrmConfig(p => ({ ...p, instanceUrl: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Sync Frequency</label>
+                  <select
+                    className="input text-xs"
+                    value={crmConfig.syncInterval}
+                    onChange={e => setCrmConfig(p => ({ ...p, syncInterval: e.target.value }))}
+                  >
+                    <option value="realtime">Real-time (Webhooks)</option>
+                    <option value="15m">Every 15 minutes</option>
+                    <option value="hourly">Hourly</option>
+                    <option value="daily">Daily</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Default Lead Status</label>
+                  <select className="input text-xs">
+                    <option>Open - Not Contacted</option>
+                    <option>Working - Contacted</option>
+                    <option>Qualified</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Field Mapping */}
+              <div className="space-y-2 pt-2 border-t border-bg-border">
+                <div className="font-semibold text-text-primary">Field Mappings</div>
+                <div className="space-y-1.5 font-mono text-2xs">
+                  {[
+                    ['Prospect Name', 'Contact.FullName'],
+                    ['Corporate Email', 'Contact.Email'],
+                    ['Company Name', 'Account.Name'],
+                    ['AI Intent Score', 'Lead.AI_Intent_Score__c'],
+                    ['Next Best Action', 'Task.Subject'],
+                  ].map(([local, remote]) => (
+                    <div key={local} className="flex items-center justify-between p-2 bg-bg-card border border-bg-border rounded">
+                      <span className="text-text-secondary">{local}</span>
+                      <span className="text-text-muted">⇄</span>
+                      <span className="text-amber-400">{remote}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-between pt-2 border-t border-bg-border">
+                <button
+                  type="button"
+                  onClick={() => showToast('info', 'Testing Connection', `Connecting to ${selectedCrmForConfig.name}... Connected! (Latency: 64ms)`)}
+                  className="btn-secondary text-xs"
+                >
+                  Test Connection
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedCrmForConfig(null)} className="btn-secondary text-xs">Cancel</button>
+                  <button
+                    onClick={() => {
+                      setSelectedCrmForConfig(null)
+                      showToast('success', 'Settings Saved', `${selectedCrmForConfig.name} configuration updated`)
+                    }}
+                    className="btn-primary text-xs"
+                  >
+                    Save Changes
+                  </button>
+                </div>
               </div>
             </div>
           </div>

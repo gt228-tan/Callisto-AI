@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Search, Bell, ChevronDown, Circle, Globe } from 'lucide-react'
 import { useAppContext } from '@/contexts/AppContext'
+import { useToast } from '@/contexts/ToastContext'
 import { getInitials } from '@/lib/utils'
 import type { Language } from '@/lib/i18n'
 
@@ -14,12 +16,12 @@ const systemStatus = [
   { label: 'Database', status: 'Operational' },
 ]
 
-const notifications = [
-  { id: 1, text: 'Campaign "Q4 Enterprise AI" completed 241 calls', time: '2m ago', type: 'success' },
-  { id: 2, text: 'New high-intent lead: Kavitha Reddy (Score: 95)', time: '8m ago', type: 'info' },
-  { id: 3, text: 'Meeting booked with Rahul Mehta — Tuesday 11 AM', time: '15m ago', type: 'success' },
-  { id: 4, text: 'Fraud alert: Unusual API activity detected', time: '1h ago', type: 'warning' },
-  { id: 5, text: 'Voice usage at 82% — 870 minutes remaining', time: '2h ago', type: 'warning' },
+const initialNotifications = [
+  { id: 1, text: 'Campaign "Q4 Enterprise AI" completed 241 calls', time: '2m ago', type: 'success', path: '/campaigns' },
+  { id: 2, text: 'New high-intent lead: Kavitha Reddy (Score: 95)', time: '8m ago', type: 'info', path: '/leads' },
+  { id: 3, text: 'Meeting booked with Rahul Mehta — Tuesday 11 AM', time: '15m ago', type: 'success', path: '/pipeline' },
+  { id: 4, text: 'Fraud alert: Unusual API activity detected', time: '1h ago', type: 'warning', path: '/admin/fraud' },
+  { id: 5, text: 'Voice usage at 82% — 870 minutes remaining', time: '2h ago', type: 'warning', path: '/admin/voice-usage' },
 ]
 
 const languages: { code: Language; label: string }[] = [
@@ -29,7 +31,10 @@ const languages: { code: Language; label: string }[] = [
 ]
 
 export function TopBar() {
+  const navigate = useNavigate()
+  const { showToast } = useToast()
   const { setGlobalSearchOpen, language, setLanguage } = useAppContext()
+  const [notifList, setNotifList] = useState(initialNotifications)
   const [notifOpen, setNotifOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
@@ -103,23 +108,52 @@ export function TopBar() {
             onClick={() => { setNotifOpen(!notifOpen); setUserOpen(false); setStatusOpen(false); setLangOpen(false) }}
             className="relative flex items-center justify-center w-7 h-7 rounded hover:bg-bg-hover text-text-muted border border-bg-border transition-colors"
             id="notifications-btn"
+            aria-label="Notifications"
           >
             <Bell className="w-3.5 h-3.5" />
-            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-500 rounded-full text-2xs text-black font-bold flex items-center justify-center">5</span>
+            {notifList.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-500 rounded-full text-2xs text-black font-bold flex items-center justify-center">
+                {notifList.length}
+              </span>
+            )}
           </button>
           {notifOpen && (
             <div className="absolute right-0 top-9 w-80 panel border rounded shadow-2xl z-50 animate-fade-in">
               <div className="px-3 py-2 border-b border-bg-border flex items-center justify-between">
                 <span className="text-xs font-semibold text-text-primary">Notifications</span>
-                <span className="text-2xs text-amber-400">Mark all read</span>
+                {notifList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotifList([])
+                      showToast('info', 'Notifications Cleared', 'All notifications marked as read')
+                    }}
+                    className="text-2xs text-amber-400 hover:text-amber-300 font-medium cursor-pointer"
+                  >
+                    Mark all read
+                  </button>
+                )}
               </div>
               <div className="max-h-72 overflow-y-auto">
-                {notifications.map(n => (
-                  <div key={n.id} className="px-3 py-2.5 border-b border-bg-border/50 hover:bg-bg-hover cursor-pointer">
-                    <div className="text-xs text-text-primary">{n.text}</div>
-                    <div className="text-2xs text-text-muted mt-1">{n.time}</div>
-                  </div>
-                ))}
+                {notifList.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-text-muted">No unread notifications</div>
+                ) : (
+                  notifList.map(n => (
+                    <div
+                      key={n.id}
+                      onClick={() => {
+                        setNotifList(prev => prev.filter(item => item.id !== n.id))
+                        setNotifOpen(false)
+                        if (n.path) navigate(n.path)
+                        showToast('info', 'Notification Opened', n.text)
+                      }}
+                      className="px-3 py-2.5 border-b border-bg-border/50 hover:bg-bg-hover cursor-pointer transition-colors"
+                    >
+                      <div className="text-xs text-text-primary">{n.text}</div>
+                      <div className="text-2xs text-text-muted mt-1">{n.time}</div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -129,17 +163,19 @@ export function TopBar() {
         <div className="relative">
           <button
             onClick={() => { setUserOpen(!userOpen); setNotifOpen(false); setStatusOpen(false); setLangOpen(false) }}
-            className="flex items-center gap-2 h-7 px-2 rounded hover:bg-bg-hover border border-bg-border transition-colors"
+            className="flex items-center gap-2 h-7 px-2 rounded hover:bg-bg-hover border border-bg-border transition-colors shrink-0"
             id="user-menu-btn"
+            title={`${currentUser.name} (${currentUser.role})`}
+            aria-label="User account menu"
           >
-            <div className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xs font-bold text-amber-400">
+            <div className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xs font-bold text-amber-400 shrink-0">
               {getInitials(currentUser.name)}
             </div>
-            <div className="hidden sm:flex flex-col text-left">
-              <span className="text-2xs font-medium text-text-primary leading-tight">{currentUser.name.split(' ')[0]}</span>
-              <span className="text-2xs text-text-muted leading-tight">{currentUser.role}</span>
+            <div className="flex flex-col text-left">
+              <span className="text-2xs font-medium text-text-primary leading-tight max-w-[70px] sm:max-w-none truncate">{currentUser.name.split(' ')[0]}</span>
+              <span className="text-2xs text-text-muted leading-tight hidden sm:inline">{currentUser.role}</span>
             </div>
-            <ChevronDown className="w-3 h-3 text-text-muted" />
+            <ChevronDown className="w-3 h-3 text-text-muted shrink-0" />
           </button>
           {userOpen && (
             <div className="absolute right-0 top-9 w-52 panel border rounded shadow-2xl z-50 animate-fade-in">
@@ -148,13 +184,40 @@ export function TopBar() {
                 <div className="text-2xs text-text-muted">{currentUser.email}</div>
                 <div className="mt-1"><span className="badge-amber">Enterprise Plan</span></div>
               </div>
-              {['Profile', 'Account Settings', 'Billing', 'API Keys', 'Help & Docs'].map(item => (
-                <button key={item} className="w-full text-left px-3 py-2 text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors">
-                  {item}
+              {[
+                { label: 'Profile', path: '/settings?tab=profile' },
+                { label: 'Account Settings', path: '/settings?tab=company' },
+                { label: 'Billing', path: '/settings?tab=billing' },
+                { label: 'API Keys', path: '/settings?tab=security' },
+                {
+                  label: 'Help & Docs',
+                  action: () => showToast('info', 'Help & Documentation', 'NexusAI Documentation and API guides are available at docs.nexusai.com'),
+                },
+              ].map(item => (
+                <button
+                  key={item.label}
+                  onClick={() => {
+                    setUserOpen(false)
+                    if (item.path) {
+                      navigate(item.path)
+                    } else if (item.action) {
+                      item.action()
+                    }
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+                >
+                  {item.label}
                 </button>
               ))}
               <div className="border-t border-bg-border">
-                <button className="w-full text-left px-3 py-2 text-xs text-danger-bright hover:bg-danger-dim transition-colors">
+                <button
+                  onClick={() => {
+                    setUserOpen(false)
+                    showToast('success', 'Signed Out', 'You have been safely signed out')
+                    navigate('/')
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs text-danger-bright hover:bg-danger-dim transition-colors"
+                >
                   Sign Out
                 </button>
               </div>

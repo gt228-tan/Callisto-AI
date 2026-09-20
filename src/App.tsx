@@ -18,6 +18,7 @@ import { SettingsPage } from '@/pages/Settings'
 import {
   AdminDashboard, AdminUsers, AdminAuditLogs, AdminFraud,
   AdminSystem, AdminVoiceUsage, AdminSubscriptions, AdminBilling, AdminPlatformSettings,
+  AdminProductApprovals,
 } from '@/pages/Admin'
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
                 {/* Admin routes */}
                 <Route path="/admin"              element={<AdminDashboard />} />
                 <Route path="/admin/users"        element={<AdminUsers />} />
+                <Route path="/admin/product-approvals" element={<AdminProductApprovals />} />
                 <Route path="/admin/subscriptions" element={<AdminSubscriptions />} />
                 <Route path="/admin/voice-usage"  element={<AdminVoiceUsage />} />
                 <Route path="/admin/billing"      element={<AdminBilling />} />

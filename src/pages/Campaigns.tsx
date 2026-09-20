@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Megaphone, Plus, Pause, Play, Eye, BarChart2, X, Check, Download } from 'lucide-react'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { MetricCard } from '@/components/ui/MetricCard'
@@ -13,6 +14,7 @@ import { exportToCSV } from '@/lib/exportCsv'
 const WIZARD_STEPS = ['Campaign Details','Select Leads','Voice Agent','Objectives','Schedule','Review & Launch']
 
 export function Campaigns() {
+  const navigate = useNavigate()
   const { showToast } = useToast()
   const { campaignList, addCampaign, togglePause: togglePauseCampaign } = useCampaigns()
   const [showWizard, setShowWizard] = useState(false)
@@ -20,6 +22,8 @@ export function Campaigns() {
   const [wizardData, setWizardData]   = useState({
     name: '', target: '', language: 'English', voice: 'Professional Female',
     tone: 'Consultative', objective: '', greeting: '',
+    scheduleStart: 'Immediately', timezone: 'Prospect Local Time',
+    maxRetries: '2', retryInterval: '24 hours',
   })
 
   const active    = campaignList.filter(c => c.status === 'ACTIVE').length
@@ -55,6 +59,8 @@ export function Campaigns() {
     setWizardData({
       name: '', target: '', language: 'English', voice: 'Professional Female',
       tone: 'Consultative', objective: '', greeting: '',
+      scheduleStart: 'Immediately', timezone: 'Prospect Local Time',
+      maxRetries: '2', retryInterval: '24 hours',
     })
     showToast('success', 'Campaign Launched!', `"${newCamp.name}" is now active`)
   }
@@ -79,7 +85,7 @@ export function Campaigns() {
             {r.status === 'ACTIVE' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
           </button>
         )}
-        <button className="btn-ghost p-1" title="Analytics"><BarChart2 className="w-3.5 h-3.5" /></button>
+        <button onClick={() => navigate('/analytics')} className="btn-ghost p-1 hover:text-amber-400" title="Analytics"><BarChart2 className="w-3.5 h-3.5" /></button>
       </div>
     )},
   ]
@@ -221,10 +227,21 @@ export function Campaigns() {
               )}
               {wizardStep === 4 && (
                 <div className="space-y-3">
-                  {[{l:'Start',opts:['Immediately','Scheduled Date/Time','Business Hours Only']},{l:'Timezone',opts:['Prospect Local Time','IST','EST','GST']},{l:'Max Retries',opts:['1','2','3','4']},{l:'Retry Interval',opts:['12 hours','24 hours','48 hours','72 hours']}].map(f=>(
-                    <div key={f.l}>
-                      <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">{f.l}</label>
-                      <select className="input">{f.opts.map(o=><option key={o}>{o}</option>)}</select>
+                  {[
+                    { label: 'Start', key: 'scheduleStart', opts: ['Immediately', 'Scheduled Date/Time', 'Business Hours Only'] },
+                    { label: 'Timezone', key: 'timezone', opts: ['Prospect Local Time', 'IST', 'EST', 'GST'] },
+                    { label: 'Max Retries', key: 'maxRetries', opts: ['1', '2', '3', '4'] },
+                    { label: 'Retry Interval', key: 'retryInterval', opts: ['12 hours', '24 hours', '48 hours', '72 hours'] },
+                  ].map(f => (
+                    <div key={f.label}>
+                      <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">{f.label}</label>
+                      <select
+                        className="input"
+                        value={(wizardData as any)[f.key]}
+                        onChange={e => setWizardData(p => ({ ...p, [f.key]: e.target.value }))}
+                      >
+                        {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
                     </div>
                   ))}
                 </div>
@@ -238,6 +255,8 @@ export function Campaigns() {
                       <div><span className="text-text-muted">Language:</span> {wizardData.language}</div>
                       <div><span className="text-text-muted">Voice:</span> {wizardData.voice}</div>
                       <div><span className="text-text-muted">Tone:</span> {wizardData.tone}</div>
+                      <div><span className="text-text-muted">Schedule:</span> {wizardData.scheduleStart} ({wizardData.timezone})</div>
+                      <div><span className="text-text-muted">Retries:</span> Max {wizardData.maxRetries} · Every {wizardData.retryInterval}</div>
                     </div>
                   </div>
                 </div>

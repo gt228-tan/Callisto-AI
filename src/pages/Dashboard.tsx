@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Users, Zap, CheckCircle, Megaphone, Phone, Calendar, TrendingUp, Mic, LayoutDashboard, ExternalLink } from 'lucide-react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, FunnelChart, Funnel, LabelList } from 'recharts'
 import { MetricCard } from '@/components/ui/MetricCard'
@@ -68,7 +69,7 @@ function generateActivityEvents(): ActivityEvent[] {
 
 const highIntentLeads = leads.filter(l => l.intent === 'HIGH').slice(0, 8)
 
-const tableColumns: Column<Lead>[] = [
+const getTableColumns = (navigate: (path: string) => void): Column<Lead>[] => [
   { key: 'name',        header: 'Lead',          render: r => (
     <div>
       <div className="font-medium text-text-primary">{r.name}</div>
@@ -87,7 +88,7 @@ const tableColumns: Column<Lead>[] = [
   { key: 'discoveredAt',header: 'Discovered',    render: r => <span className="text-text-muted font-mono text-2xs">{formatDateTime(r.discoveredAt)}</span> },
   { key: 'status',      header: 'Status',        render: r => leadStatusBadge(r.status) },
   { key: 'action',      header: 'Action',        render: _r => (
-    <button className="btn-primary text-2xs py-0.5 px-2">
+    <button onClick={(e) => { e.stopPropagation(); navigate('/leads') }} className="btn-primary text-2xs py-0.5 px-2">
       <ExternalLink className="w-2.5 h-2.5" /> View
     </button>
   )},
@@ -123,6 +124,8 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 export function Dashboard() {
+  const navigate = useNavigate()
+  const tableColumns = getTableColumns(navigate)
   const [timeRange, setTimeRange] = useState<TimeRange>('24H')
   const [chartData, setChartData] = useState(() => generateTimeData('24H'))
   const [events, setEvents] = useState<ActivityEvent[]>(() => generateActivityEvents())
@@ -296,12 +299,13 @@ export function Dashboard() {
             <span className="section-title">Recent High-Intent Opportunities</span>
             <span className="text-2xs text-text-muted ml-3">{highIntentLeads.length} prospects</span>
           </div>
-          <button className="btn-primary text-2xs">View All Leads</button>
+          <button onClick={() => navigate('/leads')} className="btn-primary text-2xs">View All Leads</button>
         </div>
         <DataTable
           data={highIntentLeads}
           columns={tableColumns}
           keyExtractor={r => r.id}
+          onRowClick={() => navigate('/leads')}
           pageSize={8}
           className="flex-1"
         />

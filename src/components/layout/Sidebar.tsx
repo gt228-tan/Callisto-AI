@@ -4,7 +4,7 @@ import {
   TrendingUp, Kanban, BarChart3, Link, Settings,
   Shield, UserCog, CreditCard, Volume2, Receipt, ScrollText,
   AlertTriangle, Activity, Sliders, ChevronLeft, ChevronRight,
-  Sparkles
+  Sparkles, CheckCircle
 } from 'lucide-react'
 import { useAppContext } from '@/contexts/AppContext'
 import { cn } from '@/lib/utils'
@@ -34,6 +34,7 @@ const mainNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { to: '/admin',             label: 'Admin Overview',    icon: <Shield className="w-3.5 h-3.5" />,     admin: true },
   { to: '/admin/users',       label: 'Users',             icon: <UserCog className="w-3.5 h-3.5" />,    admin: true },
+  { to: '/admin/product-approvals', label: 'Product Approvals', icon: <CheckCircle className="w-3.5 h-3.5" />, admin: true },
   { to: '/admin/subscriptions', label: 'Subscriptions',  icon: <CreditCard className="w-3.5 h-3.5" />, admin: true },
   { to: '/admin/voice-usage', label: 'Voice Usage',       icon: <Volume2 className="w-3.5 h-3.5" />,    admin: true },
   { to: '/admin/billing',     label: 'Billing',           icon: <Receipt className="w-3.5 h-3.5" />,    admin: true },

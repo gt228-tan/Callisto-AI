@@ -16,6 +16,7 @@ const ALL_SOURCES = ['All', ...Array.from(new Set(leads.map(l => l.source))).sor
 
 export function Leads() {
   const { showToast } = useToast()
+  const [leadsList, setLeadsList] = useState<Lead[]>(leads)
   const [industry, setIndustry]   = useState<string>('All')
   const [status,   setStatus]     = useState<string>('All')
   const [intent,   setIntent]     = useState<string>('All')
@@ -23,8 +24,21 @@ export function Leads() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [showImport, setShowImport] = useState(false)
+  const [showAddLead, setShowAddLead] = useState(false)
+  const [newLead, setNewLead] = useState({
+    name: '',
+    company: '',
+    jobTitle: '',
+    industry: 'IT Services',
+    location: 'Bangalore, India',
+    email: '',
+    phone: '',
+    source: 'LinkedIn',
+    intentScore: 85,
+    requirement: '',
+  })
 
-  const filtered = leads.filter(l =>
+  const filtered = leadsList.filter(l =>
     (industry === 'All' || l.industry === industry) &&
     (status   === 'All' || l.status   === status) &&
     (intent   === 'All' || l.intent   === intent) &&
@@ -97,7 +111,7 @@ export function Leads() {
           <button onClick={handleExport} className="btn-secondary text-xs gap-1.5">
             <Download className="w-3.5 h-3.5" /> Export
           </button>
-          <button className="btn-primary text-xs">Add Lead</button>
+          <button onClick={() => setShowAddLead(true)} className="btn-primary text-xs" id="add-lead-btn">Add Lead</button>
         </div>
       </div>
 
@@ -178,6 +192,216 @@ export function Leads() {
                 <button onClick={() => { setShowImport(false); showToast('success', 'Import Simulated', '45 leads imported successfully') }} className="btn-primary text-xs">Import</button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Lead Modal */}
+      {showAddLead && (
+        <div className="modal-overlay" onClick={() => setShowAddLead(false)}>
+          <div className="modal-panel max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="section-header">
+              <span className="section-title">Add New Lead</span>
+              <button onClick={() => setShowAddLead(false)}><X className="w-4 h-4 text-text-muted" /></button>
+            </div>
+            <form
+              onSubmit={e => {
+                e.preventDefault()
+                if (!newLead.name.trim() || !newLead.company.trim()) {
+                  showToast('error', 'Required Fields Missing', 'Please provide prospect name and company')
+                  return
+                }
+                const score = Number(newLead.intentScore) || 75
+                const created: Lead = {
+                  id: `LEAD-${Date.now()}`,
+                  name: newLead.name.trim(),
+                  company: newLead.company.trim(),
+                  jobTitle: newLead.jobTitle.trim() || 'Decision Maker',
+                  industry: newLead.industry,
+                  location: newLead.location,
+                  country: newLead.location.includes('India') ? 'India' : 'USA',
+                  email: newLead.email.trim() || `${newLead.name.toLowerCase().replace(/\s+/g, '.')}@${newLead.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+                  phone: newLead.phone.trim() || '+91-98765-43210',
+                  intentScore: score,
+                  intent: score >= 85 ? 'HIGH' : score >= 65 ? 'MEDIUM' : 'LOW',
+                  status: 'NEW',
+                  source: (newLead.source as Lead['source']) || 'LinkedIn',
+                  sourceUrl: 'https://linkedin.com',
+                  linkedin: `https://linkedin.com/in/${newLead.name.toLowerCase().replace(/\s+/g, '-')}`,
+                  website: `https://${newLead.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+                  companySize: '51-200',
+                  employees: 120,
+                  funding: 'Series A ($12M)',
+                  hiringStatus: 'Actively Hiring',
+                  techStack: ['React', 'TypeScript', 'Node.js', 'AWS'],
+                  competitors: [],
+                  aiReasoning: 'Newly added inbound high-intent prospect requiring immediate AI outreach',
+                  aiRecommendations: ['Queue for AI voice qualification', 'Send product intro deck'],
+                  discoveredAt: new Date(),
+                  enrichedAt: new Date(),
+                  lastActivity: new Date(),
+                  requirement: newLead.requirement.trim() || 'Expressed interest in AI sales automation and lead qualification.',
+                  budgetSignal: score >= 80 ? 'HIGH' : 'MEDIUM',
+                  timeline: 'Within 30 days',
+                  decisionMaker: true,
+                  needClarity: 85,
+                  urgency: 80,
+                  budgetScore: score >= 80 ? 88 : 70,
+                  authorityScore: 85,
+                  fitScore: score,
+                  campaignId: null,
+                  nextAction: 'Initiate initial AI voice qualification call',
+                  tags: ['Direct Inbound', 'New Prospect'],
+                }
+                setLeadsList(prev => [created, ...prev])
+                setShowAddLead(false)
+                setNewLead({
+                  name: '',
+                  company: '',
+                  jobTitle: '',
+                  industry: 'IT Services',
+                  location: 'Bangalore, India',
+                  email: '',
+                  phone: '',
+                  source: 'LinkedIn',
+                  intentScore: 85,
+                  requirement: '',
+                })
+                showToast('success', 'Lead Added', `${created.name} (${created.company}) has been added`)
+              }}
+              className="p-6 space-y-4 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Full Name *</label>
+                  <input
+                    required
+                    className="input text-xs"
+                    placeholder="e.g. Ramesh Varma"
+                    value={newLead.name}
+                    onChange={e => setNewLead(p => ({ ...p, name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Company Name *</label>
+                  <input
+                    required
+                    className="input text-xs"
+                    placeholder="e.g. CloudMatrix Infotech"
+                    value={newLead.company}
+                    onChange={e => setNewLead(p => ({ ...p, company: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Job Title</label>
+                  <input
+                    className="input text-xs"
+                    placeholder="e.g. VP of Engineering"
+                    value={newLead.jobTitle}
+                    onChange={e => setNewLead(p => ({ ...p, jobTitle: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Industry</label>
+                  <select
+                    className="input text-xs"
+                    value={newLead.industry}
+                    onChange={e => setNewLead(p => ({ ...p, industry: e.target.value }))}
+                  >
+                    {ALL_INDUSTRIES.filter(i => i !== 'All').map(ind => (
+                      <option key={ind} value={ind}>{ind}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Corporate Email</label>
+                  <input
+                    type="email"
+                    className="input text-xs"
+                    placeholder="prospect@company.com"
+                    value={newLead.email}
+                    onChange={e => setNewLead(p => ({ ...p, email: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Phone Number</label>
+                  <input
+                    className="input text-xs"
+                    placeholder="+91-98765-00000"
+                    value={newLead.phone}
+                    onChange={e => setNewLead(p => ({ ...p, phone: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Location</label>
+                  <input
+                    className="input text-xs"
+                    placeholder="e.g. Mumbai, India"
+                    value={newLead.location}
+                    onChange={e => setNewLead(p => ({ ...p, location: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Lead Source</label>
+                  <select
+                    className="input text-xs"
+                    value={newLead.source}
+                    onChange={e => setNewLead(p => ({ ...p, source: e.target.value }))}
+                  >
+                    {ALL_SOURCES.filter(s => s !== 'All').map(src => (
+                      <option key={src} value={src}>{src}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Intent Score (0-100)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    className="input text-xs font-mono"
+                    value={newLead.intentScore}
+                    onChange={e => setNewLead(p => ({ ...p, intentScore: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Requirement / AI Notes</label>
+                <textarea
+                  rows={2}
+                  className="input resize-none text-xs"
+                  placeholder="Details about buyer timeline, technology evaluation, pain points..."
+                  value={newLead.requirement}
+                  onChange={e => setNewLead(p => ({ ...p, requirement: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2 border-t border-bg-border">
+                <button
+                  type="button"
+                  onClick={() => setShowAddLead(false)}
+                  className="btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary text-xs"
+                >
+                  Add Lead
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

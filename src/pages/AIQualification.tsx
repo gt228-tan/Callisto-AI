@@ -100,13 +100,31 @@ export function AIQualification() {
       </div>
 
       {/* Verdict Filter */}
-      <div className="flex gap-2">
-        {(['All','QUALIFIED','LIKELY','NEEDS_REVIEW','NOT_QUALIFIED'] as Verdict[]).map(v => (
-          <button key={v} onClick={() => setVerdictFilter(v)}
-            className={`text-xs px-3 py-1.5 rounded border transition-colors ${verdictFilter === v ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'border-bg-border text-text-muted hover:border-bg-hover'}`}>
-            {v === 'All' ? 'All' : v.replace('_', ' ')}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-2 items-center">
+        {(['All', 'QUALIFIED', 'LIKELY', 'NEEDS_REVIEW', 'NOT_QUALIFIED'] as Verdict[]).map(v => {
+          const isActive = verdictFilter === v
+          const count = v === 'All' ? total : v === 'QUALIFIED' ? qualified : v === 'LIKELY' ? likely : v === 'NEEDS_REVIEW' ? review : rejected
+          return (
+            <button
+              key={v}
+              onClick={() => setVerdictFilter(v)}
+              className={`text-xs px-3 py-1.5 rounded-md border flex items-center gap-2 transition-all duration-150 ${
+                isActive
+                  ? 'bg-amber-500 text-black border-amber-500 shadow-sm font-semibold'
+                  : 'bg-bg-card border-bg-border text-text-secondary hover:text-text-primary hover:border-amber-500/30'
+              }`}
+            >
+              <span>{v === 'All' ? 'All Leads' : v.replace('_', ' ')}</span>
+              <span
+                className={`text-2xs px-1.5 py-0.5 rounded-full font-mono font-bold ${
+                  isActive ? 'bg-black/20 text-black' : 'bg-bg-panel text-text-muted'
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Table */}
