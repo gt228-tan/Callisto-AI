@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Bell, ChevronDown, Circle, Globe } from 'lucide-react'
+import { Search, Bell, ChevronDown, Circle, Globe, Menu, Sparkles } from 'lucide-react'
 import { useAppContext } from '@/contexts/AppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { DevicePreviewBanner } from './DevicePreviewBanner'
 import { getInitials } from '@/lib/utils'
 import type { Language } from '@/lib/i18n'
 
-const currentUser = { name: 'Tanishq Mehta', email: 'tanishq@demo-nexusai.com', role: 'Admin' }
+const currentUser = { name: 'Tanishq Mehta', email: 'tanishq@demo-callistoai.com', role: 'Admin' }
 
 const systemStatus = [
   { label: 'API', status: 'Operational' },
@@ -33,7 +34,7 @@ const languages: { code: Language; label: string }[] = [
 export function TopBar() {
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { setGlobalSearchOpen, language, setLanguage } = useAppContext()
+  const { setGlobalSearchOpen, language, setLanguage, setMobileNavOpen, t } = useAppContext()
   const [notifList, setNotifList] = useState(initialNotifications)
   const [notifOpen, setNotifOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
@@ -41,31 +42,51 @@ export function TopBar() {
   const [statusOpen, setStatusOpen] = useState(false)
 
   return (
-    <header className="h-[48px] flex items-center gap-3 px-4 bg-bg-secondary border-b border-bg-border shrink-0 relative z-20">
+    <header className="h-[48px] flex items-center gap-2 sm:gap-3 px-2 sm:px-4 bg-bg-secondary border-b border-bg-border shrink-0 relative z-20">
+      {/* Mobile Menu Button & Brand */}
+      <div className="flex items-center gap-2 md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          className="p-1.5 rounded hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
+          id="mobile-menu-trigger"
+          aria-label="Toggle navigation menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="w-6 h-6 rounded bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+        </div>
+      </div>
+
       {/* Global Search */}
       <button
         onClick={() => setGlobalSearchOpen(true)}
-        className="flex-1 flex items-center gap-2 bg-bg-card border border-bg-border rounded px-3 h-7 text-xs text-text-muted hover:border-amber-500/40 transition-colors max-w-md"
+        className="flex-1 flex items-center gap-2 bg-bg-card border border-bg-border rounded px-2 sm:px-3 h-7 text-xs text-text-muted hover:border-amber-500/40 transition-colors max-w-md min-w-0"
         id="global-search-trigger"
+        aria-label="Open search dialog"
       >
         <Search className="w-3.5 h-3.5 shrink-0" />
-        <span className="text-xs font-mono">Search leads, companies, campaigns, calls...</span>
-        <kbd className="ml-auto text-2xs border border-bg-border rounded px-1 py-0.5 bg-bg-panel">⌘K</kbd>
+        <span className="text-xs font-mono truncate hidden sm:inline">{t('common.search', 'Search leads, companies, campaigns, calls...')}</span>
+        <span className="text-xs font-mono text-text-muted sm:hidden">{t('common.search', 'Search...')}</span>
+        <kbd className="hidden sm:inline ml-auto text-2xs border border-bg-border rounded px-1 py-0.5 bg-bg-panel">⌘K</kbd>
       </button>
 
-      <div className="flex items-center gap-2 ml-auto">
+      <div className="flex items-center gap-1 sm:gap-2 ml-auto shrink-0">
         {/* System Status */}
         <div className="relative">
           <button
             onClick={() => { setStatusOpen(!statusOpen); setNotifOpen(false); setUserOpen(false); setLangOpen(false) }}
             className="flex items-center gap-1.5 px-2 h-7 rounded hover:bg-bg-hover text-2xs text-success font-medium border border-bg-border transition-colors"
             id="system-status-btn"
+            title="System Status: All Operational"
           >
-            <Circle className="w-2 h-2 fill-success text-success" />
-            All Systems Operational
+            <Circle className="w-2 h-2 fill-success text-success shrink-0" />
+            <span className="hidden lg:inline">{t('common.allSystems', 'All Systems Operational')}</span>
+            <span className="hidden sm:inline lg:hidden">Operational</span>
           </button>
           {statusOpen && (
-            <div className="absolute right-0 top-9 w-56 panel border rounded shadow-2xl z-50 animate-fade-in">
+            <div className="absolute right-0 top-9 w-56 max-w-[calc(100vw-24px)] panel border rounded shadow-2xl z-50 animate-fade-in">
               <div className="px-3 py-2 border-b border-bg-border text-2xs text-text-muted font-medium uppercase tracking-wide">System Health</div>
               {systemStatus.map(s => (
                 <div key={s.label} className="flex items-center justify-between px-3 py-2 hover:bg-bg-hover">
@@ -79,23 +100,33 @@ export function TopBar() {
           )}
         </div>
 
-        {/* Language */}
+        {/* Device Preview Switcher (Web, Android, iOS) */}
+        <DevicePreviewBanner />
+
+        {/* Language Switcher */}
         <div className="relative">
           <button
             onClick={() => { setLangOpen(!langOpen); setNotifOpen(false); setUserOpen(false); setStatusOpen(false) }}
-            className="flex items-center gap-1 px-2 h-7 rounded hover:bg-bg-hover text-text-muted border border-bg-border transition-colors"
+            className="flex items-center gap-1 px-1.5 sm:px-2 h-7 rounded hover:bg-bg-hover text-text-muted border border-bg-border transition-colors cursor-pointer"
             id="lang-switcher-btn"
           >
-            <Globe className="w-3.5 h-3.5" />
-            <span className="text-2xs font-medium">{language.toUpperCase()}</span>
+            <Globe className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-2xs font-semibold text-text-primary uppercase">{language}</span>
           </button>
           {langOpen && (
-            <div className="absolute right-0 top-9 w-36 panel border rounded shadow-2xl z-50 animate-fade-in">
+            <div className="absolute right-0 top-9 w-40 max-w-[calc(100vw-24px)] panel border rounded shadow-2xl z-50 animate-fade-in divide-y divide-bg-border">
               {languages.map(l => (
-                <button key={l.code} onClick={() => { setLanguage(l.code); setLangOpen(false) }}
-                  className={`w-full text-left px-3 py-2 text-xs hover:bg-bg-hover flex items-center justify-between ${language === l.code ? 'text-amber-400' : 'text-text-secondary'}`}>
-                  {l.label}
-                  {language === l.code && <span className="text-2xs">✓</span>}
+                <button
+                  key={l.code}
+                  onClick={() => {
+                    setLanguage(l.code)
+                    setLangOpen(false)
+                    showToast('info', 'Language Updated', `Interface language switched to ${l.label}`)
+                  }}
+                  className={`w-full text-left px-3 py-2 text-xs hover:bg-bg-hover flex items-center justify-between transition-colors ${language === l.code ? 'text-amber-400 font-bold bg-amber-500/10' : 'text-text-secondary'}`}
+                >
+                  <span>{l.label}</span>
+                  {language === l.code && <span className="text-2xs font-bold text-amber-400">✓</span>}
                 </button>
               ))}
             </div>
@@ -106,7 +137,7 @@ export function TopBar() {
         <div className="relative">
           <button
             onClick={() => { setNotifOpen(!notifOpen); setUserOpen(false); setStatusOpen(false); setLangOpen(false) }}
-            className="relative flex items-center justify-center w-7 h-7 rounded hover:bg-bg-hover text-text-muted border border-bg-border transition-colors"
+            className="relative flex items-center justify-center w-7 h-7 rounded hover:bg-bg-hover text-text-muted border border-bg-border transition-colors shrink-0"
             id="notifications-btn"
             aria-label="Notifications"
           >
@@ -118,9 +149,9 @@ export function TopBar() {
             )}
           </button>
           {notifOpen && (
-            <div className="absolute right-0 top-9 w-80 panel border rounded shadow-2xl z-50 animate-fade-in">
+            <div className="absolute right-0 top-9 w-[calc(100vw-24px)] sm:w-80 max-w-sm panel border rounded shadow-2xl z-50 animate-fade-in">
               <div className="px-3 py-2 border-b border-bg-border flex items-center justify-between">
-                <span className="text-xs font-semibold text-text-primary">Notifications</span>
+                <span className="text-xs font-semibold text-text-primary">{t('common.notifications', 'Notifications')}</span>
                 {notifList.length > 0 && (
                   <button
                     type="button"
@@ -130,7 +161,7 @@ export function TopBar() {
                     }}
                     className="text-2xs text-amber-400 hover:text-amber-300 font-medium cursor-pointer"
                   >
-                    Mark all read
+                    {t('common.markAllRead', 'Mark all read')}
                   </button>
                 )}
               </div>
@@ -178,7 +209,7 @@ export function TopBar() {
             <ChevronDown className="w-3 h-3 text-text-muted shrink-0" />
           </button>
           {userOpen && (
-            <div className="absolute right-0 top-9 w-52 panel border rounded shadow-2xl z-50 animate-fade-in">
+            <div className="absolute right-0 top-9 w-52 max-w-[calc(100vw-24px)] panel border rounded shadow-2xl z-50 animate-fade-in">
               <div className="px-3 py-3 border-b border-bg-border">
                 <div className="text-xs font-semibold text-text-primary">{currentUser.name}</div>
                 <div className="text-2xs text-text-muted">{currentUser.email}</div>
@@ -191,7 +222,7 @@ export function TopBar() {
                 { label: 'API Keys', path: '/settings?tab=security' },
                 {
                   label: 'Help & Docs',
-                  action: () => showToast('info', 'Help & Documentation', 'NexusAI Documentation and API guides are available at docs.nexusai.com'),
+                  action: () => showToast('info', 'Help & Documentation', 'Callisto AI Documentation and API guides are available at docs.callistoai.com'),
                 },
               ].map(item => (
                 <button

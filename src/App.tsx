@@ -4,6 +4,8 @@ import { ToastProvider } from '@/contexts/ToastContext'
 import { CampaignProvider } from '@/contexts/CampaignContext'
 import { AppShell } from '@/components/layout/AppShell'
 import { Dashboard } from '@/pages/Dashboard'
+import { BusinessOnboarding } from '@/pages/BusinessOnboarding'
+import { PipelineJourney } from '@/pages/PipelineJourney'
 import { LeadDiscovery } from '@/pages/LeadDiscovery'
 import { Leads } from '@/pages/Leads'
 import { AIQualification } from '@/pages/AIQualification'
@@ -30,6 +32,8 @@ export default function App() {
             <Routes>
               <Route element={<AppShell />}>
                 <Route path="/"                   element={<Dashboard />} />
+                <Route path="/business-onboarding" element={<BusinessOnboarding />} />
+                <Route path="/pipeline-journey"   element={<PipelineJourney />} />
                 <Route path="/lead-discovery"     element={<LeadDiscovery />} />
                 <Route path="/leads"              element={<Leads />} />
                 <Route path="/ai-qualification"   element={<AIQualification />} />

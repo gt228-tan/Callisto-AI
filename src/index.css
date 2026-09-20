@@ -146,15 +146,15 @@
     @apply fixed inset-0 bg-black/60 backdrop-blur-sm z-40 animate-fade-in;
   }
   .drawer-panel {
-    @apply fixed top-0 right-0 h-full w-[480px] bg-bg-panel border-l border-bg-border z-50 overflow-y-auto animate-slide-in-right;
+    @apply fixed top-0 right-0 h-full w-full sm:w-[480px] max-w-full bg-bg-panel border-l border-bg-border z-50 overflow-y-auto animate-slide-in-right;
   }
 
   /* Modal */
   .modal-overlay {
-    @apply fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in;
+    @apply fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in;
   }
   .modal-panel {
-    @apply bg-bg-panel border border-bg-border rounded-lg shadow-2xl w-full animate-fade-in;
+    @apply bg-bg-panel border border-bg-border rounded-lg shadow-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in;
   }
 
   /* Search bar */
@@ -265,7 +265,13 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
+
   .animate-fade-in        { animation: fade-in 0.15s ease-out; }
   .animate-slide-in-right { animation: slide-in-right 0.2s ease-out; }
+  .animate-slide-in-left  { animation: slide-in-left 0.2s ease-out; }
   .animate-stream-in      { animation: stream-in 0.25s ease-out; }
 }

@@ -31,9 +31,9 @@ export function MarketIntelligence() {
   const { showToast } = useToast()
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
       <div className="flex items-center gap-2">
-        <TrendingUp className="w-4 h-4 text-amber-400" />
+        <TrendingUp className="w-4 h-4 text-amber-400 shrink-0" />
         <h1 className="text-sm font-bold text-text-primary">Market Intelligence</h1>
       </div>
 

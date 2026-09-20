@@ -77,16 +77,16 @@ export function Analytics() {
   const convRate       = ((meetings / totalCalls) * 100).toFixed(1)
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-amber-400" />
+          <BarChart3 className="w-4 h-4 text-amber-400 shrink-0" />
           <h1 className="text-sm font-bold text-text-primary">Analytics</h1>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-thin">
           {dateFilters.map(f => (
             <button key={f} onClick={() => setDateFilter(f)}
-              className={`text-xs px-3 py-1.5 rounded border transition-colors ${dateFilter === f ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'border-bg-border text-text-muted hover:border-bg-hover'}`}>
+              className={`text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded border transition-colors shrink-0 ${dateFilter === f ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'border-bg-border text-text-muted hover:border-bg-hover'}`}>
               {f}
             </button>
           ))}
@@ -94,7 +94,7 @@ export function Analytics() {
       </div>
 
       {/* KPI Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
         {[
           {l:'Lead Discovery', v:totalLeads},
           {l:'High Intent',    v:highIntent},
@@ -105,9 +105,9 @@ export function Analytics() {
           {l:'Meetings',       v:meetings},
           {l:'Conv Rate',      v:`${convRate}%`},
         ].map(m => (
-          <div key={m.l} className="panel-card p-3">
-            <div className="text-2xs text-text-muted uppercase tracking-wide">{m.l}</div>
-            <div className="text-xl font-bold font-mono text-text-primary mt-0.5">{m.v}</div>
+          <div key={m.l} className="panel-card p-2.5 sm:p-3">
+            <div className="text-2xs text-text-muted uppercase tracking-wide truncate">{m.l}</div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-text-primary mt-0.5 truncate">{m.v}</div>
           </div>
         ))}
       </div>

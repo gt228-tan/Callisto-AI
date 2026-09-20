@@ -53,7 +53,7 @@ export const calls: Call[] = [
     transcript: [
       { speaker: 'AI', text: 'Hello, am I speaking with Rahul Mehta?', timestamp: '00:00:03' },
       { speaker: 'PROSPECT', text: 'Yes, this is Rahul. Who is this?', timestamp: '00:00:07', sentiment: 'NEUTRAL' },
-      { speaker: 'AI', text: 'Hi Rahul, I\'m Aria calling from NexusAI Solutions. I noticed your LinkedIn post about implementing an AI customer support solution — we specialize in exactly that. Do you have 3 minutes?', timestamp: '00:00:12' },
+      { speaker: 'AI', text: 'Hi Rahul, I\'m Aria calling from Callisto AI Solutions. I noticed your LinkedIn post about implementing an AI customer support solution — we specialize in exactly that. Do you have 3 minutes?', timestamp: '00:00:12' },
       { speaker: 'PROSPECT', text: 'Oh yes, I remember posting that. Sure, go ahead, I have a few minutes.', timestamp: '00:00:28', sentiment: 'POSITIVE' },
       { speaker: 'AI', text: 'Thank you! Could you tell me more about your current timeline? You mentioned a Q4 kickoff — is that still the plan?', timestamp: '00:00:35' },
       { speaker: 'PROSPECT', text: 'Yes, exactly. We need to get this implemented by end of November. We\'ve already allocated the budget, about 18 lakhs for this quarter.', timestamp: '00:00:48', sentiment: 'POSITIVE' },
@@ -85,7 +85,7 @@ export const calls: Call[] = [
     buyingSignals: ['Confirmed SDR scaling initiative', 'Clear 6-week timeline', 'Budget pre-approved by CFO'],
     objections: ['Needs FinTech-specific compliance documentation', 'Wants to see HubSpot native sync in action'],
     transcript: [
-      { speaker: 'AI', text: 'Hi Sarah, this is Aria from NexusAI. I saw your LinkedIn post about scaling your SDR team from 20 to 50. Congratulations on the growth! Do you have 3 minutes?', timestamp: '00:00:05' },
+      { speaker: 'AI', text: 'Hi Sarah, this is Aria from Callisto AI. I saw your LinkedIn post about scaling your SDR team from 20 to 50. Congratulations on the growth! Do you have 3 minutes?', timestamp: '00:00:05' },
       { speaker: 'PROSPECT', text: 'Yes, thanks! We\'re actually in the middle of evaluating tools for exactly that.', timestamp: '00:00:22', sentiment: 'POSITIVE' },
       { speaker: 'AI', text: 'Perfect timing then. Our platform automates lead qualification for exactly this SDR scaling scenario — we can help qualify 10x more leads without adding headcount. What CRM are you on?', timestamp: '00:00:32' },
       { speaker: 'PROSPECT', text: 'HubSpot, primarily. That\'s non-negotiable for us.', timestamp: '00:00:48', sentiment: 'NEUTRAL' },
@@ -115,7 +115,7 @@ export const calls: Call[] = [
     transcript: [
       { speaker: 'AI', text: 'Hello, may I speak with Vikas Malhotra?', timestamp: '00:00:04' },
       { speaker: 'PROSPECT', text: 'Yes, this is Vikas. Can I ask who\'s calling?', timestamp: '00:00:09', sentiment: 'NEUTRAL' },
-      { speaker: 'AI', text: 'Hi Vikas, I\'m Aria from NexusAI. We help telecom companies reduce subscriber churn using AI-powered proactive calling. Do you have 2 minutes?', timestamp: '00:00:17' },
+      { speaker: 'AI', text: 'Hi Vikas, I\'m Aria from Callisto AI. We help telecom companies reduce subscriber churn using AI-powered proactive calling. Do you have 2 minutes?', timestamp: '00:00:17' },
       { speaker: 'PROSPECT', text: 'Look, I\'m actually in a meeting right now. Can you call me back tomorrow?', timestamp: '00:00:31', sentiment: 'NEUTRAL' },
       { speaker: 'AI', text: 'Of course! Would 3 PM IST tomorrow work? And just to confirm — are you working on a churn reduction initiative currently?', timestamp: '00:00:40' },
       { speaker: 'PROSPECT', text: 'Yes actually. We have a 50K subscriber renewal issue we\'re trying to address. Call me tomorrow at 3.', timestamp: '00:00:52', sentiment: 'POSITIVE' },
@@ -167,7 +167,7 @@ export const calls: Call[] = [
     transcript: [
       { speaker: 'AI', text: 'Good morning, is this Kavitha Reddy from Bharat Insurance Group?', timestamp: '00:00:04' },
       { speaker: 'PROSPECT', text: 'Yes, who am I speaking with?', timestamp: '00:00:10', sentiment: 'NEUTRAL' },
-      { speaker: 'AI', text: 'Hi Kavitha, I\'m Aria from NexusAI Solutions. We\'ve been working with several insurance companies on AI-powered policy renewal calls — I understand Bharat Insurance has about 200,000 renewals annually?', timestamp: '00:00:18' },
+      { speaker: 'AI', text: 'Hi Kavitha, I\'m Aria from Callisto AI Solutions. We\'ve been working with several insurance companies on AI-powered policy renewal calls — I understand Bharat Insurance has about 200,000 renewals annually?', timestamp: '00:00:18' },
       { speaker: 'PROSPECT', text: 'Yes, that\'s right. We currently have a call center of 45 agents handling renewals. Are you saying AI can replace that?', timestamp: '00:00:38', sentiment: 'NEUTRAL' },
       { speaker: 'AI', text: 'Not replace — augment. Our AI handles routine renewal reminders and initial qualification, so your agents focus only on complex cases. We\'ve helped an insurance company reduce renewal call costs by 62% while maintaining a 94% customer satisfaction score. Do you handle Telugu and Hindi-speaking policyholders?', timestamp: '00:00:55' },
       { speaker: 'PROSPECT', text: 'Yes! Telugu is huge for us — Andhra and Telangana are our biggest markets. Does your AI speak Telugu?', timestamp: '00:01:22', sentiment: 'POSITIVE' },
@@ -209,7 +209,7 @@ export const calls: Call[] = [
       transcript: [
         { speaker: 'AI' as const, text: `Hello, is this ${prospects[i % 10]}?`, timestamp: '00:00:04' },
         { speaker: 'PROSPECT' as const, text: 'Yes, who is calling?', timestamp: '00:00:10', sentiment: 'NEUTRAL' as const },
-        { speaker: 'AI' as const, text: `Hi! I'm calling from NexusAI Solutions about our AI sales automation platform.`, timestamp: '00:00:16' },
+        { speaker: 'AI' as const, text: `Hi! I'm calling from Callisto AI Solutions about our AI sales automation platform.`, timestamp: '00:00:16' },
       ],
     } as Call
   })

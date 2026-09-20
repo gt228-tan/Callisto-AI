@@ -68,18 +68,16 @@ export function SalesPipeline() {
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Kanban className="w-4 h-4 text-amber-400" />
+          <Kanban className="w-4 h-4 text-amber-400 shrink-0" />
           <h1 className="text-sm font-bold text-text-primary">Sales Pipeline</h1>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-xs">
-            <DollarSign className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-text-muted">Pipeline Value:</span>
-            <span className="font-bold font-mono text-amber-400">₹{(totalValue / 100000).toFixed(0)}L</span>
-          </div>
+        <div className="flex items-center gap-2 text-xs">
+          <DollarSign className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="text-text-muted">Pipeline Value:</span>
+          <span className="font-bold font-mono text-amber-400">₹{(totalValue / 100000).toFixed(0)}L</span>
         </div>
       </div>
 

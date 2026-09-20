@@ -3,6 +3,7 @@ import { Link2, CheckCircle, XCircle, RefreshCw, Settings, Upload, Download } fr
 import { useToast } from '@/contexts/ToastContext'
 import { leads } from '@/data/leads'
 import { exportToCSV } from '@/lib/exportCsv'
+import { ImportLeadsModal } from '@/components/ui/ImportLeadsModal'
 
 const crms = [
   { id: 'salesforce', name: 'Salesforce', desc: 'CRM & Sales Cloud integration', logo: '⚡', status: 'CONNECTED' as const, lastSync: '2m ago', records: 234 },
@@ -29,7 +30,7 @@ export function CRM() {
   const [selectedCrmForConfig, setSelectedCrmForConfig] = useState<typeof crms[0] | null>(null)
   const [crmConfig, setCrmConfig] = useState({
     syncInterval: '15m',
-    instanceUrl: 'https://nexusai.salesforce.com',
+    instanceUrl: 'https://callistoai.salesforce.com',
   })
 
   function handleExportAllLeads(filterType?: string) {
@@ -79,17 +80,17 @@ export function CRM() {
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Link2 className="w-4 h-4 text-amber-400" />
+          <Link2 className="w-4 h-4 text-amber-400 shrink-0" />
           <h1 className="text-sm font-bold text-text-primary">CRM Integration</h1>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowImport(true)} className="btn-secondary text-xs gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setShowImport(true)} className="btn-secondary text-xs gap-1.5 flex-1 sm:flex-initial justify-center">
             <Upload className="w-3.5 h-3.5" /> Import Leads
           </button>
-          <button onClick={() => handleExportAllLeads()} className="btn-secondary text-xs gap-1.5">
+          <button onClick={() => handleExportAllLeads()} className="btn-secondary text-xs gap-1.5 flex-1 sm:flex-initial justify-center">
             <Download className="w-3.5 h-3.5" /> Export Leads
           </button>
         </div>
@@ -178,28 +179,13 @@ export function CRM() {
       </div>
 
       {/* Import Modal */}
-      {showImport && (
-        <div className="modal-overlay" onClick={() => setShowImport(false)}>
-          <div className="modal-panel max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="section-header">
-              <span className="section-title">Import Leads</span>
-              <button onClick={() => setShowImport(false)}><XCircle className="w-4 h-4 text-text-muted" /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="border-2 border-dashed border-amber-500/40 rounded-lg p-8 text-center bg-amber-500/5">
-                <Upload className="w-8 h-8 text-amber-400 mx-auto mb-2" />
-                <div className="text-sm text-text-secondary">Drop your CSV file here</div>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowImport(false)} className="btn-secondary text-xs">Cancel</button>
-                <button onClick={() => { setShowImport(false); showToast('success','Import Complete','120 leads imported successfully') }} className="btn-primary text-xs">
-                  Import 120 Leads
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ImportLeadsModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        onImportSuccess={(count) => {
+          showToast('success', 'Import Complete', `${count} leads successfully imported and mapped to CRM`)
+        }}
+      />
 
       {/* CRM Settings Modal */}
       {selectedCrmForConfig && (

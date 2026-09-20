@@ -63,20 +63,20 @@ export function CallHistory() {
   ]
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <ScrollText className="w-4 h-4 text-amber-400" />
+          <ScrollText className="w-4 h-4 text-amber-400 shrink-0" />
           <h1 className="text-sm font-bold text-text-primary">Call History</h1>
           <span className="text-2xs text-text-muted">({calls.length} calls)</span>
         </div>
-        <button onClick={handleExportCalls} className="btn-secondary text-xs gap-1.5">
+        <button onClick={handleExportCalls} className="btn-secondary text-xs gap-1.5 w-full sm:w-auto justify-center">
           <Download className="w-3.5 h-3.5" /> Export CSV
         </button>
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         {[
           { label: 'Total Calls', value: calls.length },
           { label: 'Answered', value: calls.filter(c => c.outcome !== 'NO_ANSWER' && c.outcome !== 'VOICEMAIL').length },
@@ -84,9 +84,9 @@ export function CallHistory() {
           { label: 'Qualified', value: calls.filter(c => c.outcome === 'QUALIFIED' || c.qualification === 'QUALIFIED').length },
           { label: 'Avg Duration', value: `${Math.floor(calls.reduce((s,c)=>s+c.duration,0)/calls.length / 60)}m ${Math.floor(calls.reduce((s,c)=>s+c.duration,0)/calls.length % 60)}s` },
         ].map(m => (
-          <div key={m.label} className="panel-card p-3">
-            <div className="text-2xs text-text-muted uppercase tracking-wide">{m.label}</div>
-            <div className="text-xl font-bold font-mono text-text-primary mt-0.5">{m.value}</div>
+          <div key={m.label} className="panel-card p-2.5 sm:p-3">
+            <div className="text-2xs text-text-muted uppercase tracking-wide truncate">{m.label}</div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-text-primary mt-0.5 truncate">{m.value}</div>
           </div>
         ))}
       </div>

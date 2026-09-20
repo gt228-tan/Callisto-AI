@@ -79,19 +79,19 @@ export function AIQualification() {
   ]
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-amber-400" />
+          <Brain className="w-4 h-4 text-amber-400 shrink-0" />
           <h1 className="text-sm font-bold text-text-primary">AI Qualification</h1>
         </div>
-        <button onClick={() => showToast('info', 'Bulk Qualify Running', 'Qualifying all unqualified leads...')} className="btn-primary text-xs">
+        <button onClick={() => showToast('info', 'Bulk Qualify Running', 'Qualifying all unqualified leads...')} className="btn-primary text-xs w-full sm:w-auto justify-center">
           <Play className="w-3.5 h-3.5" /> Run Bulk Qualification
         </button>
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         <MetricCard label="Total Analyzed" value={total}     icon={<Brain className="w-3.5 h-3.5" />} />
         <MetricCard label="Qualified"      value={qualified} icon={<CheckCircle className="w-3.5 h-3.5" />} delta={9.7} accent />
         <MetricCard label="Likely"         value={likely}    />

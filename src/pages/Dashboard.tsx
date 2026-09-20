@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Zap, CheckCircle, Megaphone, Phone, Calendar, TrendingUp, Mic, LayoutDashboard, ExternalLink } from 'lucide-react'
+import { Users, Zap, CheckCircle, Megaphone, Phone, Calendar, TrendingUp, Mic, LayoutDashboard, ExternalLink, Workflow, Globe, ArrowRight, Sparkles } from 'lucide-react'
+import { useAppContext } from '@/contexts/AppContext'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, FunnelChart, Funnel, LabelList } from 'recharts'
 import { MetricCard } from '@/components/ui/MetricCard'
 import { ActivityStream } from '@/components/ui/ActivityStream'
@@ -125,6 +126,7 @@ function CustomTooltip({ active, payload, label }: any) {
 
 export function Dashboard() {
   const navigate = useNavigate()
+  const { t } = useAppContext()
   const tableColumns = getTableColumns(navigate)
   const [timeRange, setTimeRange] = useState<TimeRange>('24H')
   const [chartData, setChartData] = useState(() => generateTimeData('24H'))
@@ -151,30 +153,64 @@ export function Dashboard() {
   }, [])
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
         <div className="flex items-center gap-2">
-          <LayoutDashboard className="w-4 h-4 text-amber-400" />
-          <h1 className="text-sm font-bold text-text-primary">AI Sales Intelligence</h1>
+          <LayoutDashboard className="w-4 h-4 text-amber-400 shrink-0" />
+          <h1 className="text-sm font-bold text-text-primary">{t('dash.title', 'AI Sales Intelligence')}</h1>
           <span className="text-text-muted">/</span>
-          <span className="text-xs text-text-muted">Overview</span>
+          <span className="text-xs text-text-muted">{t('nav.overview', 'Overview')}</span>
         </div>
-        <div className="text-2xs text-text-muted font-mono">
-          Real-time sales intelligence and AI-powered engagement
+        <div className="text-2xs text-text-muted font-mono hidden sm:block">
+          {t('dash.subtitle', 'Real-time sales intelligence and AI-powered outreach')}
+        </div>
+      </div>
+
+      {/* Autonomous Sales Pipeline Banner */}
+      <div className="p-3.5 sm:p-4 rounded-lg bg-gradient-to-r from-amber-500/15 via-blue-500/10 to-transparent border border-amber-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded text-3xs font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40 uppercase">
+              {t('dash.pipelineJourneyBanner', 'Autonomous Sales Pipeline')}
+            </span>
+            <span className="text-xs font-bold text-text-primary flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> 9-Stage Autonomous Engine
+            </span>
+          </div>
+          <p className="text-2xs text-text-secondary leading-relaxed max-w-3xl">
+            {t('dash.pipelineJourneyDesc', 'Understand Business → Discover → Enrich → Qualify → AI Call → Insights → Follow-up')}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => navigate('/business-onboarding')}
+            className="btn-secondary text-2xs gap-1.5 py-1.5"
+          >
+            <Globe className="w-3.5 h-3.5 text-blue-400" />
+            {t('dash.onboardingBanner', 'Onboard Business')}
+          </button>
+          <button
+            onClick={() => navigate('/pipeline-journey')}
+            className="btn-primary text-2xs gap-1.5 py-1.5 shadow-lg shadow-amber-500/10"
+          >
+            <Workflow className="w-3.5 h-3.5" />
+            {t('dash.launchPipeline', 'Launch Pipeline Journey')}
+            <ArrowRight className="w-3 h-3 ml-0.5" />
+          </button>
         </div>
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
-        <MetricCard label="Total Leads"       value={24681} delta={12.8} icon={<Users className="w-3.5 h-3.5" />} />
-        <MetricCard label="High Intent"       value={3842}  delta={18.4} icon={<Zap className="w-3.5 h-3.5" />} accent />
-        <MetricCard label="Qualified"         value={1426}  delta={9.7}  icon={<CheckCircle className="w-3.5 h-3.5" />} />
-        <MetricCard label="Active Campaigns"  value={3}     delta={0}    icon={<Megaphone className="w-3.5 h-3.5" />} subtitle="campaigns" />
-        <MetricCard label="Calls Today"       value={842}   delta={21.3} icon={<Phone className="w-3.5 h-3.5" />} />
-        <MetricCard label="Meetings Booked"   value={287}   delta={14.2} icon={<Calendar className="w-3.5 h-3.5" />} />
-        <MetricCard label="Conversion Rate"   value="12.8%" delta={2.1}  icon={<TrendingUp className="w-3.5 h-3.5" />} />
-        <MetricCard label="Voice Minutes"     value={4820}  delta={-3.2} icon={<Mic className="w-3.5 h-3.5" />} unit="min" subtitle="of 10k" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 sm:gap-3">
+        <MetricCard label={t('metric.totalLeads', 'Total Leads')}       value={24681} delta={12.8} icon={<Users className="w-3.5 h-3.5" />} />
+        <MetricCard label={t('metric.highIntent', 'High Intent')}       value={3842}  delta={18.4} icon={<Zap className="w-3.5 h-3.5" />} accent />
+        <MetricCard label={t('metric.qualified', 'Qualified')}         value={1426}  delta={9.7}  icon={<CheckCircle className="w-3.5 h-3.5" />} />
+        <MetricCard label={t('metric.activeCampaigns', 'Active Campaigns')}  value={3}     delta={0}    icon={<Megaphone className="w-3.5 h-3.5" />} subtitle="campaigns" />
+        <MetricCard label={t('metric.callsToday', 'Calls Today')}       value={842}   delta={21.3} icon={<Phone className="w-3.5 h-3.5" />} />
+        <MetricCard label={t('metric.meetingsBooked', 'Meetings Booked')}   value={287}   delta={14.2} icon={<Calendar className="w-3.5 h-3.5" />} />
+        <MetricCard label={t('metric.conversionRate', 'Conversion Rate')}   value="12.8%" delta={2.1}  icon={<TrendingUp className="w-3.5 h-3.5" />} />
+        <MetricCard label={t('metric.voiceMinutes', 'Voice Minutes')}     value={4820}  delta={-3.2} icon={<Mic className="w-3.5 h-3.5" />} unit="min" subtitle="of 10k" />
       </div>
 
       {/* Charts Row */}
@@ -182,7 +218,7 @@ export function Dashboard() {
         {/* Lead Discovery Activity */}
         <div className="xl:col-span-2 panel">
           <div className="section-header">
-            <span className="section-title">Lead Discovery Activity</span>
+            <span className="section-title">{t('dash.leadDiscovery', 'Lead Discovery Activity')}</span>
             <div className="flex gap-1">
               {timeRanges.map(r => (
                 <button key={r} onClick={() => setTimeRange(r)}
@@ -230,7 +266,7 @@ export function Dashboard() {
         {/* Lead Sources */}
         <div className="panel">
           <div className="section-header">
-            <span className="section-title">Lead Sources</span>
+            <span className="section-title">{t('dash.leadSources', 'Lead Sources')}</span>
           </div>
           <div className="p-3 flex flex-col items-center gap-3">
             <ResponsiveContainer width="100%" height={140}>
@@ -260,7 +296,7 @@ export function Dashboard() {
         {/* AI Qualification Funnel */}
         <div className="panel">
           <div className="section-header">
-            <span className="section-title">AI Qualification Funnel</span>
+            <span className="section-title">{t('dash.aiFunnel', 'AI Qualification Funnel')}</span>
           </div>
           <div className="p-3 space-y-1">
             {funnelData.map((stage, i) => {
@@ -283,7 +319,7 @@ export function Dashboard() {
         {/* AI Activity Stream */}
         <div className="xl:col-span-2 panel flex flex-col">
           <div className="section-header">
-            <span className="section-title">AI Activity Stream</span>
+            <span className="section-title">{t('dash.activityStream', 'AI Activity Stream')}</span>
             <span className="text-2xs text-success flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />LIVE
             </span>
@@ -294,12 +330,14 @@ export function Dashboard() {
 
       {/* High-Intent Opportunities Table */}
       <div className="panel flex flex-col">
-        <div className="section-header">
+        <div className="section-header flex-col sm:flex-row gap-2 items-start sm:items-center">
           <div>
-            <span className="section-title">Recent High-Intent Opportunities</span>
-            <span className="text-2xs text-text-muted ml-3">{highIntentLeads.length} prospects</span>
+            <span className="section-title">{t('dash.highIntentOpp', 'Recent High-Intent Opportunities')}</span>
+            <span className="text-2xs text-text-muted ml-2 sm:ml-3">{highIntentLeads.length} prospects</span>
           </div>
-          <button onClick={() => navigate('/leads')} className="btn-primary text-2xs">View All Leads</button>
+          <button onClick={() => navigate('/leads')} className="btn-primary text-2xs w-full sm:w-auto text-center justify-center">
+            {t('dash.viewAllLeads', 'View All Leads')}
+          </button>
         </div>
         <DataTable
           data={highIntentLeads}

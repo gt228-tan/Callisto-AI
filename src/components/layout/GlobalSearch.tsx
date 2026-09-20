@@ -61,29 +61,32 @@ export function GlobalSearch() {
       <div className="modal-overlay" onClick={() => setGlobalSearchOpen(false)}>
         <div className="modal-panel max-w-2xl" onClick={e => e.stopPropagation()}>
           {/* Search input */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-bg-border">
+          <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 border-b border-bg-border">
             <Search className="w-4 h-4 text-text-muted shrink-0" />
             <input
               autoFocus
-              className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none font-mono"
-              placeholder="Search leads, companies, campaigns, calls..."
+              className="flex-1 bg-transparent text-xs sm:text-sm text-text-primary placeholder:text-text-muted outline-none font-mono min-w-0"
+              placeholder="Search leads, campaigns, calls..."
               value={query}
               onChange={e => setQuery(e.target.value)}
             />
             {query && (
-              <button onClick={() => setQuery('')} className="text-text-muted hover:text-text-primary">
+              <button onClick={() => setQuery('')} className="text-text-muted hover:text-text-primary p-1">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
-            <kbd className="text-2xs border border-bg-border rounded px-1.5 py-0.5 bg-bg-panel text-text-muted">Esc</kbd>
+            <kbd className="hidden sm:inline text-2xs border border-bg-border rounded px-1.5 py-0.5 bg-bg-panel text-text-muted">Esc</kbd>
+            <button onClick={() => setGlobalSearchOpen(false)} className="sm:hidden text-text-muted hover:text-text-primary p-1 text-xs font-semibold">
+              Cancel
+            </button>
           </div>
 
-          <div className="max-h-[500px] overflow-y-auto p-3 space-y-4">
+          <div className="max-h-[60vh] sm:max-h-[500px] overflow-y-auto p-3 space-y-4">
             {/* Quick actions (shown when no query) */}
             {!q && (
               <div>
                 <div className="text-2xs uppercase tracking-wider text-text-muted px-1 mb-2 font-medium">Quick Navigation</div>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                   {quickActions.map(a => (
                     <button key={a.label} onClick={() => navigate_to(a.to)}
                       className="flex items-center gap-2 px-3 py-2.5 bg-bg-card hover:bg-bg-hover rounded border border-bg-border text-xs text-text-secondary hover:text-text-primary transition-colors">

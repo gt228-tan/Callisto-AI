@@ -26,22 +26,22 @@ export function MetricCard({ label, value, delta, unit, icon, accent, loading, s
   const displayValue = typeof value === 'number' ? formatNumber(value) : value
 
   return (
-    <div className={`panel-card p-4 flex flex-col gap-1 hover:border-amber-500/30 transition-colors group ${accent ? 'border-amber-500/20 bg-amber-500/5' : ''}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-2xs uppercase tracking-wider text-text-muted font-medium">{label}</span>
-        {icon && <span className={`text-text-muted group-hover:text-amber-500 transition-colors ${accent ? 'text-amber-500' : ''}`}>{icon}</span>}
+    <div className={`panel-card p-3 sm:p-4 flex flex-col gap-1 hover:border-amber-500/30 transition-colors group ${accent ? 'border-amber-500/20 bg-amber-500/5' : ''}`}>
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-2xs uppercase tracking-wider text-text-muted font-medium truncate">{label}</span>
+        {icon && <span className={`shrink-0 text-text-muted group-hover:text-amber-500 transition-colors ${accent ? 'text-amber-500' : ''}`}>{icon}</span>}
       </div>
-      <div className={`text-2xl font-bold font-mono tracking-tight ${accent ? 'text-amber-400' : 'text-text-primary'}`}>
-        {displayValue}{unit && <span className="text-sm text-text-muted ml-1">{unit}</span>}
+      <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight truncate ${accent ? 'text-amber-400' : 'text-text-primary'}`}>
+        {displayValue}{unit && <span className="text-xs sm:text-sm text-text-muted ml-1">{unit}</span>}
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
         {delta !== undefined && (
-          <span className={`flex items-center gap-0.5 text-2xs font-semibold ${delta > 0 ? 'metric-up' : delta < 0 ? 'metric-down' : 'text-text-muted'}`}>
+          <span className={`flex items-center gap-0.5 text-2xs font-semibold shrink-0 ${delta > 0 ? 'metric-up' : delta < 0 ? 'metric-down' : 'text-text-muted'}`}>
             {delta > 0 ? <TrendingUp className="w-3 h-3" /> : delta < 0 ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
             {formatDelta(delta)}
           </span>
         )}
-        {subtitle && <span className="text-2xs text-text-muted">{subtitle}</span>}
+        {subtitle && <span className="text-2xs text-text-muted truncate">{subtitle}</span>}
       </div>
     </div>
   )

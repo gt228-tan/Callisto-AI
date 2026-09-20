@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { Users, Download, Upload, Filter, X } from 'lucide-react'
+import { Users, Download, Upload, Filter, X, Star, Sparkles } from 'lucide-react'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { IntentScore } from '@/components/ui/IntentScore'
 import { intentBadge, leadStatusBadge } from '@/components/ui/StatusBadge'
 import { leads, type Lead, type LeadStatus, type IntentLevel } from '@/data/leads'
 import { formatDate, timeAgo } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
+import { useAppContext } from '@/contexts/AppContext'
 import { exportToCSV } from '@/lib/exportCsv'
 import { LeadDrawer } from './LeadDiscovery'
+import { ImportLeadsModal } from '@/components/ui/ImportLeadsModal'
 
 const ALL_INDUSTRIES = ['All', ...Array.from(new Set(leads.map(l => l.industry))).sort()]
 const ALL_STATUSES: (LeadStatus | 'All')[] = ['All','NEW','ENRICHED','QUALIFIED','CONTACTED','INTERESTED','MEETING','OPPORTUNITY','WON','LOST','NOT_QUALIFIED']
@@ -16,6 +18,7 @@ const ALL_SOURCES = ['All', ...Array.from(new Set(leads.map(l => l.source))).sor
 
 export function Leads() {
   const { showToast } = useToast()
+  const { t } = useAppContext()
   const [leadsList, setLeadsList] = useState<Lead[]>(leads)
   const [industry, setIndustry]   = useState<string>('All')
   const [status,   setStatus]     = useState<string>('All')
@@ -94,32 +97,44 @@ export function Leads() {
   const hasFilters = industry !== 'All' || status !== 'All' || intent !== 'All' || source !== 'All'
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-amber-400" />
-          <h1 className="text-sm font-bold text-text-primary">Leads</h1>
+          <Users className="w-4 h-4 text-amber-400 shrink-0" />
+          <h1 className="text-sm font-bold text-text-primary">{t('nav.leads', 'Leads')}</h1>
           <span className="text-2xs text-text-muted">({leads.length} total)</span>
-        </div>
-        <div className="flex gap-2">
           {selectedIds.size > 0 && (
-            <span className="text-2xs text-amber-400 self-center">{selectedIds.size} selected</span>
+            <span className="text-2xs text-amber-400 font-medium ml-1">({selectedIds.size} selected)</span>
           )}
-          <button onClick={() => setShowImport(true)} className="btn-secondary text-xs gap-1.5">
-            <Upload className="w-3.5 h-3.5" /> Import CSV
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setStatus('INTERESTED')
+              setIntent('HIGH')
+              showToast('info', 'Filtering Interested Prospects', 'Showing high-intent leads requiring immediate sales follow-up')
+            }}
+            className="btn-secondary text-xs gap-1.5 flex-1 sm:flex-initial justify-center border-amber-500/40 text-amber-400 bg-amber-500/10"
+          >
+            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /> Interested Prospects
           </button>
-          <button onClick={handleExport} className="btn-secondary text-xs gap-1.5">
-            <Download className="w-3.5 h-3.5" /> Export
+          <button onClick={() => setShowImport(true)} className="btn-secondary text-xs gap-1.5 flex-1 sm:flex-initial justify-center">
+            <Upload className="w-3.5 h-3.5" /> {t('common.import', 'Import CSV')}
           </button>
-          <button onClick={() => setShowAddLead(true)} className="btn-primary text-xs" id="add-lead-btn">Add Lead</button>
+          <button onClick={handleExport} className="btn-secondary text-xs gap-1.5 flex-1 sm:flex-initial justify-center">
+            <Download className="w-3.5 h-3.5" /> {t('common.export', 'Export')}
+          </button>
+          <button onClick={() => setShowAddLead(true)} className="btn-primary text-xs w-full sm:w-auto justify-center" id="add-lead-btn">
+            {t('common.create', 'Add Lead')}
+          </button>
         </div>
       </div>
 
       {/* Filters */}
       <div className="panel p-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex items-center gap-1 text-2xs text-text-muted">
-            <Filter className="w-3 h-3" /> Filters
+        <div className="flex flex-wrap items-end gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-1 text-2xs text-text-muted w-full sm:w-auto mb-1 sm:mb-0">
+            <Filter className="w-3 h-3" /> {t('common.filter', 'Filters')}
           </div>
           {([
             { label: 'Industry', value: industry, setter: setIndustry, options: ALL_INDUSTRIES },
@@ -127,19 +142,19 @@ export function Leads() {
             { label: 'Intent',   value: intent,   setter: setIntent,   options: ALL_INTENTS },
             { label: 'Source',   value: source,   setter: setSource,   options: ALL_SOURCES },
           ] as const).map(f => (
-            <div key={f.label}>
+            <div key={f.label} className="w-full sm:w-auto flex-1 sm:flex-initial min-w-[120px]">
               <label className="text-2xs text-text-muted mb-1 block">{f.label}</label>
-              <select className="input w-36" value={f.value} onChange={e => f.setter(e.target.value)}>
+              <select className="input w-full sm:w-36" value={f.value} onChange={e => f.setter(e.target.value)}>
                 {f.options.map((o: string) => <option key={o}>{o}</option>)}
               </select>
             </div>
           ))}
           {hasFilters && (
-            <button onClick={clearFilters} className="flex items-center gap-1 btn-ghost text-xs mt-4">
+            <button onClick={clearFilters} className="flex items-center gap-1 btn-ghost text-xs mt-2 sm:mt-4">
               <X className="w-3 h-3" /> Clear Filters
             </button>
           )}
-          <div className="ml-auto self-end text-2xs text-text-muted">{filtered.length} records</div>
+          <div className="w-full sm:w-auto sm:ml-auto self-end text-2xs text-text-muted text-right">{filtered.length} records</div>
         </div>
       </div>
 
@@ -171,30 +186,16 @@ export function Leads() {
       )}
 
       {/* Import Modal */}
-      {showImport && (
-        <div className="modal-overlay" onClick={() => setShowImport(false)}>
-          <div className="modal-panel max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="section-header">
-              <span className="section-title">Import Leads</span>
-              <button onClick={() => setShowImport(false)}><X className="w-4 h-4 text-text-muted" /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="border-2 border-dashed border-bg-border rounded-lg p-8 text-center hover:border-amber-500/40 transition-colors cursor-pointer">
-                <Upload className="w-8 h-8 text-text-muted mx-auto mb-2" />
-                <div className="text-sm text-text-secondary">Drop CSV or Excel file here</div>
-                <div className="text-xs text-text-muted mt-1">or click to browse</div>
-              </div>
-              <div className="text-xs text-text-muted">
-                Supported columns: Name, Email, Phone, Company, Industry, Location, Job Title
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowImport(false)} className="btn-secondary text-xs">Cancel</button>
-                <button onClick={() => { setShowImport(false); showToast('success', 'Import Simulated', '45 leads imported successfully') }} className="btn-primary text-xs">Import</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ImportLeadsModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        onImportSuccess={(count, newLeads) => {
+          if (newLeads && newLeads.length > 0) {
+            setLeadsList(prev => [...(newLeads as Lead[]), ...prev])
+          }
+          showToast('success', 'Import Complete', `${count} leads imported successfully and added to active pipeline`)
+        }}
+      />
 
       {/* Add Lead Modal */}
       {showAddLead && (

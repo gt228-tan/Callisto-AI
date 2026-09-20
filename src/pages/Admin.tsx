@@ -36,14 +36,14 @@ export function AdminDashboard() {
   const activityData = Array.from({length:30},(_,i)=>({ day:`${i+1}`, calls: Math.floor(Math.random()*200)+50, leads: Math.floor(Math.random()*100)+30 }))
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
       <div className="flex items-center gap-2">
-        <Shield className="w-4 h-4 text-blue-400" />
+        <Shield className="w-4 h-4 text-blue-400 shrink-0" />
         <h1 className="text-sm font-bold text-text-primary">Admin Dashboard</h1>
         <span className="badge-blue">ADMIN</span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         <MetricCard label="Total Users"     value={adminUsers.length} delta={8.3} icon={<UserCog className="w-3.5 h-3.5" />} />
         <MetricCard label="Active Users"    value={activeUsers}       delta={5.1} accent />
         <MetricCard label="Monthly Revenue" value={`$${revenue}`}     delta={14.2} />
@@ -158,21 +158,21 @@ export function AdminUsers() {
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <UserCog className="w-4 h-4 text-blue-400" />
+          <UserCog className="w-4 h-4 text-blue-400 shrink-0" />
           <h1 className="text-sm font-bold text-text-primary">User Management</h1>
           <span className="badge-blue">ADMIN</span>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExportUsers} className="btn-secondary text-xs gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={handleExportUsers} className="btn-secondary text-xs gap-1.5 flex-1 sm:flex-initial justify-center">
             <Download className="w-3.5 h-3.5" /> Export CSV
           </button>
-          <button onClick={() => showToast('info','Invite Sent','User invite email sent')} className="btn-primary text-xs">+ Invite User</button>
+          <button onClick={() => showToast('info','Invite Sent','User invite email sent')} className="btn-primary text-xs flex-1 sm:flex-initial justify-center">+ Invite User</button>
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         <MetricCard label="Total Users"    value={users.length} />
         <MetricCard label="Active"         value={users.filter(u=>u.status==='ACTIVE').length} accent />
         <MetricCard label="Trial"          value={users.filter(u=>u.status==='TRIAL').length} />
@@ -622,7 +622,7 @@ const initialProductApprovals: ProductApprovalItem[] = [
   },
   {
     id: 'PRD-104',
-    company: 'Nexus Software Group',
+    company: 'Callisto Software Group',
     productName: 'B2B Customer Support AI Voicebot',
     industry: 'Enterprise SaaS',
     category: 'Customer Experience Software',
@@ -631,7 +631,7 @@ const initialProductApprovals: ProductApprovalItem[] = [
     riskLevel: 'LOW',
     status: 'APPROVED',
     riskFlags: ['None - standard customer support product'],
-    catalogDoc: 'Nexus_Voice_Spec_Sheet.pdf',
+    catalogDoc: 'Callisto_Voice_Spec_Sheet.pdf',
     description: 'Voice AI agents that handle Tier-1 incoming support queries and CRM ticket logging.',
     targetMarket: 'E-commerce, Telecom, SaaS support directors',
     reviewerNotes: 'Approved for automated voice outreach across all global regions.',

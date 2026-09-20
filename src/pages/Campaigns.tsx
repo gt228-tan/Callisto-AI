@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Megaphone, Plus, Pause, Play, Eye, BarChart2, X, Check, Download } from 'lucide-react'
+import { Megaphone, Plus, Pause, Play, Eye, BarChart2, X, Check, Download, RotateCcw, Clock, Globe } from 'lucide-react'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { MetricCard } from '@/components/ui/MetricCard'
 import { campaignStatusBadge } from '@/components/ui/StatusBadge'
@@ -9,21 +9,25 @@ import { leads, type Lead } from '@/data/leads'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
 import { useCampaigns } from '@/contexts/CampaignContext'
+import { useAppContext } from '@/contexts/AppContext'
 import { exportToCSV } from '@/lib/exportCsv'
 
-const WIZARD_STEPS = ['Campaign Details','Select Leads','Voice Agent','Objectives','Schedule','Review & Launch']
+const WIZARD_STEPS = ['Campaign Details','Select Leads','Voice Agent','Objectives','Schedule & Location','Review & Launch']
 
 export function Campaigns() {
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { language, t } = useAppContext()
   const { campaignList, addCampaign, togglePause: togglePauseCampaign } = useCampaigns()
   const [showWizard, setShowWizard] = useState(false)
   const [wizardStep, setWizardStep]   = useState(0)
   const [wizardData, setWizardData]   = useState({
     name: '', target: '', language: 'English', voice: 'Professional Female',
     tone: 'Consultative', objective: '', greeting: '',
-    scheduleStart: 'Immediately', timezone: 'Prospect Local Time',
-    maxRetries: '2', retryInterval: '24 hours',
+    scheduleStart: 'Immediately', timezone: 'Prospect Local Time (09:00 - 17:00)',
+    region: 'India & South Asia (IST)',
+    maxRetries: '3', retryInterval: '24 hours',
+    onlyBusinessHours: true,
   })
 
   const active    = campaignList.filter(c => c.status === 'ACTIVE').length
@@ -40,6 +44,21 @@ export function Campaigns() {
     const camp = campaignList.find(c => c.id === id)
     togglePauseCampaign(id)
     showToast('info', camp?.status === 'ACTIVE' ? 'Campaign Paused' : 'Campaign Resumed', camp?.name ?? '')
+  }
+
+  function repeatCampaign(camp: Campaign) {
+    const repeated = addCampaign({
+      name: `[Repeat] ${camp.name}`,
+      target: camp.target,
+      agent: camp.agent,
+      status: 'ACTIVE',
+      language: camp.language,
+      voice: camp.voice,
+      tone: camp.tone,
+      objective: `Re-dialing unanswered and high-intent leads from ${camp.name}`,
+      greeting: `Hello, this is follow-up outreach regarding our earlier discussion.`,
+    })
+    showToast('success', 'Campaign Repeated!', `"${repeated.name}" is launched with automated retry schedule.`)
   }
 
   function launchCampaign() {
@@ -59,8 +78,10 @@ export function Campaigns() {
     setWizardData({
       name: '', target: '', language: 'English', voice: 'Professional Female',
       tone: 'Consultative', objective: '', greeting: '',
-      scheduleStart: 'Immediately', timezone: 'Prospect Local Time',
-      maxRetries: '2', retryInterval: '24 hours',
+      scheduleStart: 'Immediately', timezone: 'Prospect Local Time (09:00 - 17:00)',
+      region: 'India & South Asia (IST)',
+      maxRetries: '3', retryInterval: '24 hours',
+      onlyBusinessHours: true,
     })
     showToast('success', 'Campaign Launched!', `"${newCamp.name}" is now active`)
   }
@@ -78,14 +99,23 @@ export function Campaigns() {
     { key: 'meetings',   header: 'Meetings',   render: r => <span className="font-mono text-info-bright">{r.meetings}</span> },
     { key: 'conversion', header: 'Conv %',     sortable: true, render: r => <span className={`font-mono font-bold ${r.conversion >= 12 ? 'text-success' : 'text-text-muted'}`}>{r.conversion}%</span> },
     { key: 'createdAt',  header: 'Created',    render: r => <span className="text-2xs text-text-muted font-mono">{formatDate(r.createdAt)}</span> },
-    { key: 'actions',    header: '',           render: r => (
-      <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+    { key: 'actions',    header: 'Actions',    render: r => (
+      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
         {(r.status === 'ACTIVE' || r.status === 'PAUSED') && (
           <button onClick={() => togglePause(r.id)} className="btn-ghost p-1" title={r.status === 'ACTIVE' ? 'Pause' : 'Resume'}>
             {r.status === 'ACTIVE' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
           </button>
         )}
-        <button onClick={() => navigate('/analytics')} className="btn-ghost p-1 hover:text-amber-400" title="Analytics"><BarChart2 className="w-3.5 h-3.5" /></button>
+        <button
+          onClick={() => repeatCampaign(r)}
+          className="btn-ghost p-1 hover:text-amber-400"
+          title="Repeat Campaign (Re-dial unanswered & clone)"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={() => navigate('/analytics')} className="btn-ghost p-1 hover:text-amber-400" title="Analytics">
+          <BarChart2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     )},
   ]
@@ -110,30 +140,30 @@ export function Campaigns() {
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Megaphone className="w-4 h-4 text-amber-400" />
-          <h1 className="text-sm font-bold text-text-primary">Campaigns</h1>
+          <Megaphone className="w-4 h-4 text-amber-400 shrink-0" />
+          <h1 className="text-sm font-bold text-text-primary">{t('campaigns.title', 'Campaigns')}</h1>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExportCampaigns} className="btn-secondary text-xs gap-1.5">
-            <Download className="w-3.5 h-3.5" /> Export CSV
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={handleExportCampaigns} className="btn-secondary text-xs gap-1.5 flex-1 sm:flex-initial justify-center">
+            <Download className="w-3.5 h-3.5" /> {t('common.export', 'Export CSV')}
           </button>
-          <button onClick={() => setShowWizard(true)} className="btn-primary text-xs gap-1.5">
-            <Plus className="w-3.5 h-3.5" /> Create Campaign
+          <button onClick={() => setShowWizard(true)} className="btn-primary text-xs gap-1.5 flex-1 sm:flex-initial justify-center">
+            <Plus className="w-3.5 h-3.5" /> {t('campaigns.create', 'Create Campaign')}
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        <MetricCard label="Active"     value={active}        accent />
-        <MetricCard label="Scheduled"  value={scheduled}     />
-        <MetricCard label="Total Calls" value={totalCalls}   />
-        <MetricCard label="Answered"   value={totalAnswered}  />
-        <MetricCard label="Qualified"  value={totalQualified} />
-        <MetricCard label="Meetings"   value={totalMeetings}  />
-        <MetricCard label="Conv Rate"  value={`${avgConversion}%`} delta={2.1} />
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3">
+        <MetricCard label={t('campaigns.active', 'Active')}     value={active}        accent />
+        <MetricCard label={t('campaigns.scheduled', 'Scheduled')}  value={scheduled}     />
+        <MetricCard label={t('campaigns.totalCalls', 'Total Calls')} value={totalCalls}   />
+        <MetricCard label={t('campaigns.answered', 'Answered')}   value={totalAnswered}  />
+        <MetricCard label={t('metric.qualified', 'Qualified')}  value={totalQualified} />
+        <MetricCard label={t('metric.meetingsBooked', 'Meetings')}   value={totalMeetings}  />
+        <MetricCard label={t('campaigns.convRate', 'Conv Rate')}  value={`${avgConversion}%`} delta={2.1} />
       </div>
 
       <div className="panel flex flex-col">
@@ -143,7 +173,7 @@ export function Campaigns() {
           keyExtractor={r => r.id}
           pageSize={10}
           searchable
-          searchPlaceholder="Search campaigns..."
+          searchPlaceholder="Search campaigns by name, target, language..."
           searchKeys={['name','target','agent','language']}
           emptyMessage="No campaigns found."
         />
@@ -154,12 +184,12 @@ export function Campaigns() {
         <div className="modal-overlay" onClick={() => setShowWizard(false)}>
           <div className="modal-panel max-w-2xl" onClick={e => e.stopPropagation()}>
             <div className="section-header">
-              <span className="section-title">Create New Campaign</span>
+              <span className="section-title">Create Location-Aware Campaign</span>
               <button onClick={() => setShowWizard(false)}><X className="w-4 h-4 text-text-muted" /></button>
             </div>
 
             {/* Wizard Steps */}
-            <div className="flex items-center gap-1 px-6 py-3 border-b border-bg-border overflow-x-auto">
+            <div className="flex items-center gap-1 px-4 sm:px-6 py-3 border-b border-bg-border overflow-x-auto scrollbar-thin">
               {WIZARD_STEPS.map((s, i) => (
                 <div key={s} className="flex items-center gap-1 shrink-0">
                   <div className={`w-5 h-5 rounded-full flex items-center justify-center text-2xs font-bold ${i < wizardStep ? 'bg-success text-black' : i === wizardStep ? 'bg-amber-500 text-black' : 'bg-bg-border text-text-muted'}`}>
@@ -171,23 +201,23 @@ export function Campaigns() {
               ))}
             </div>
 
-            <div className="p-6 space-y-4 min-h-[280px]">
+            <div className="p-4 sm:p-6 space-y-4 min-h-[280px]">
               {wizardStep === 0 && (
                 <div className="space-y-3">
                   <div>
                     <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Campaign Name *</label>
-                    <input className="input" placeholder="e.g. Q4 Enterprise AI Outreach" value={wizardData.name} onChange={e => setWizardData(p => ({...p, name: e.target.value}))} />
+                    <input className="input text-xs" placeholder="e.g. Q4 Enterprise AI Outreach" value={wizardData.name} onChange={e => setWizardData(p => ({...p, name: e.target.value}))} />
                   </div>
                   <div>
                     <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Target Audience</label>
-                    <input className="input" placeholder="e.g. IT Decision Makers in India" value={wizardData.target} onChange={e => setWizardData(p => ({...p, target: e.target.value}))} />
+                    <input className="input text-xs" placeholder="e.g. IT Decision Makers in India" value={wizardData.target} onChange={e => setWizardData(p => ({...p, target: e.target.value}))} />
                   </div>
                 </div>
               )}
               {wizardStep === 1 && (
                 <div className="space-y-2">
                   <div className="text-xs text-text-muted mb-3">Select leads to include in this campaign. {leads.filter(l => l.intent === 'HIGH').length} high-intent leads available.</div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {[{l:'All High Intent',c:'badge-high',v:leads.filter(l=>l.intent==='HIGH').length},{l:'Qualified',c:'badge-success',v:leads.filter(l=>l.status==='QUALIFIED').length},{l:'Enriched',c:'badge-blue',v:leads.filter(l=>l.status==='ENRICHED').length}].map(s=>(
                       <div key={s.l} className="p-3 bg-bg-card border border-bg-border rounded hover:border-amber-500/40 cursor-pointer text-center">
                         <div className="text-lg font-bold text-text-primary font-mono">{s.v}</div>
@@ -199,15 +229,15 @@ export function Campaigns() {
               )}
               {wizardStep === 2 && (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {[
-                      {label:'Language',key:'language',options:['English','Hindi','Gujarati','Spanish','French','German','Arabic','Tamil','Telugu']},
-                      {label:'Voice',key:'voice',options:['Professional Female','Professional Male','Native Hindi Female','Native Arabic Male','British Male','Youthful Female']},
+                      {label:'Primary Language',key:'language',options:['English','Hindi','Gujarati','Spanish','French','German','Arabic']},
+                      {label:'Voice Timbre',key:'voice',options:['Professional Female','Professional Male','Native Hindi Female','Native Arabic Male','British Male']},
                       {label:'Tone',key:'tone',options:['Consultative','Friendly','Professional','Formal','Energetic']},
                     ].map(f => (
                       <div key={f.key}>
                         <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">{f.label}</label>
-                        <select className="input" value={(wizardData as any)[f.key]} onChange={e => setWizardData(p => ({...p, [f.key]: e.target.value}))}>
+                        <select className="input text-xs" value={(wizardData as any)[f.key]} onChange={e => setWizardData(p => ({...p, [f.key]: e.target.value}))}>
                           {f.options.map(o => <option key={o}>{o}</option>)}
                         </select>
                       </div>
@@ -215,35 +245,81 @@ export function Campaigns() {
                   </div>
                   <div>
                     <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Greeting Script</label>
-                    <textarea rows={3} className="input resize-none" placeholder="Hello, I'm calling from..." value={wizardData.greeting} onChange={e => setWizardData(p => ({...p, greeting: e.target.value}))} />
+                    <textarea rows={3} className="input text-xs resize-none" placeholder="Hello, I'm calling from..." value={wizardData.greeting} onChange={e => setWizardData(p => ({...p, greeting: e.target.value}))} />
                   </div>
                 </div>
               )}
               {wizardStep === 3 && (
                 <div>
                   <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Call Objective</label>
-                  <textarea rows={4} className="input resize-none" placeholder="Qualify the prospect, identify pain points, and schedule a technical demo..." value={wizardData.objective} onChange={e => setWizardData(p => ({...p, objective: e.target.value}))} />
+                  <textarea rows={4} className="input text-xs resize-none" placeholder="Qualify the prospect, identify pain points, and schedule a technical demo..." value={wizardData.objective} onChange={e => setWizardData(p => ({...p, objective: e.target.value}))} />
                 </div>
               )}
               {wizardStep === 4 && (
                 <div className="space-y-3">
-                  {[
-                    { label: 'Start', key: 'scheduleStart', opts: ['Immediately', 'Scheduled Date/Time', 'Business Hours Only'] },
-                    { label: 'Timezone', key: 'timezone', opts: ['Prospect Local Time', 'IST', 'EST', 'GST'] },
-                    { label: 'Max Retries', key: 'maxRetries', opts: ['1', '2', '3', '4'] },
-                    { label: 'Retry Interval', key: 'retryInterval', opts: ['12 hours', '24 hours', '48 hours', '72 hours'] },
-                  ].map(f => (
-                    <div key={f.label}>
-                      <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">{f.label}</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Target Geographic Region</label>
                       <select
-                        className="input"
-                        value={(wizardData as any)[f.key]}
-                        onChange={e => setWizardData(p => ({ ...p, [f.key]: e.target.value }))}
+                        className="input text-xs w-full"
+                        value={wizardData.region}
+                        onChange={e => setWizardData(p => ({ ...p, region: e.target.value }))}
                       >
-                        {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
+                        <option>India & South Asia (IST)</option>
+                        <option>North America (EST / PST)</option>
+                        <option>Europe & UK (CET / GMT)</option>
+                        <option>Middle East & GCC (GST)</option>
+                        <option>Asia Pacific & Australia (SGT / AEST)</option>
                       </select>
                     </div>
-                  ))}
+
+                    <div>
+                      <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Calling Schedule & Window</label>
+                      <select
+                        className="input text-xs w-full"
+                        value={wizardData.timezone}
+                        onChange={e => setWizardData(p => ({ ...p, timezone: e.target.value }))}
+                      >
+                        <option>Prospect Local Time (09:00 - 17:00)</option>
+                        <option>Morning Batch (09:30 - 12:30)</option>
+                        <option>Afternoon Batch (14:00 - 17:30)</option>
+                        <option>Immediate Continuous Dial</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Max Unanswered Retries</label>
+                      <select
+                        className="input text-xs w-full"
+                        value={wizardData.maxRetries}
+                        onChange={e => setWizardData(p => ({ ...p, maxRetries: e.target.value }))}
+                      >
+                        <option value="1">1 Attempt</option>
+                        <option value="2">2 Attempts</option>
+                        <option value="3">3 Attempts (Recommended)</option>
+                        <option value="5">5 Attempts</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Retry Backoff Interval</label>
+                      <select
+                        className="input text-xs w-full"
+                        value={wizardData.retryInterval}
+                        onChange={e => setWizardData(p => ({ ...p, retryInterval: e.target.value }))}
+                      >
+                        <option>4 hours</option>
+                        <option>12 hours</option>
+                        <option>24 hours (Next Day)</option>
+                        <option>48 hours</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-bg-card rounded border border-bg-border text-2xs text-text-secondary flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Compliance Guardrail: AI only initiates calls between 9:00 AM and 5:00 PM in the prospect's verified time zone.</span>
+                  </div>
                 </div>
               )}
               {wizardStep === 5 && (
@@ -252,11 +328,11 @@ export function Campaigns() {
                     <div className="text-xs font-semibold text-success mb-2">Campaign Ready to Launch</div>
                     <div className="space-y-1 text-xs text-text-secondary">
                       <div><span className="text-text-muted">Name:</span> {wizardData.name || 'New Campaign'}</div>
+                      <div><span className="text-text-muted">Target Region:</span> {wizardData.region}</div>
                       <div><span className="text-text-muted">Language:</span> {wizardData.language}</div>
-                      <div><span className="text-text-muted">Voice:</span> {wizardData.voice}</div>
-                      <div><span className="text-text-muted">Tone:</span> {wizardData.tone}</div>
-                      <div><span className="text-text-muted">Schedule:</span> {wizardData.scheduleStart} ({wizardData.timezone})</div>
-                      <div><span className="text-text-muted">Retries:</span> Max {wizardData.maxRetries} · Every {wizardData.retryInterval}</div>
+                      <div><span className="text-text-muted">Voice:</span> {wizardData.voice} ({wizardData.tone})</div>
+                      <div><span className="text-text-muted">Schedule:</span> {wizardData.timezone}</div>
+                      <div><span className="text-text-muted">Retry Rule:</span> Max {wizardData.maxRetries} retries every {wizardData.retryInterval}</div>
                     </div>
                   </div>
                 </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Radar, Play, CheckSquare, Square, ExternalLink, X, Building2, Globe, Phone, Mail, Linkedin, Star, Megaphone } from 'lucide-react'
+import { Radar, Play, CheckSquare, Square, ExternalLink, X, Building2, Globe, Phone, Mail, Linkedin, Star, Megaphone, ShieldCheck, Sparkles } from 'lucide-react'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { IntentScore, ScoreBar } from '@/components/ui/IntentScore'
 import { intentBadge, leadStatusBadge } from '@/components/ui/StatusBadge'
@@ -7,6 +7,7 @@ import { AIProgressSteps } from '@/components/ui/States'
 import { leads, type Lead } from '@/data/leads'
 import { discoverLeads } from '@/services/aiService'
 import { useToast } from '@/contexts/ToastContext'
+import { useAppContext } from '@/contexts/AppContext'
 import { exportToCSV } from '@/lib/exportCsv'
 import { formatDateTime, timeAgo } from '@/lib/utils'
 
@@ -29,6 +30,7 @@ const aiSteps = [
 
 export function LeadDiscovery() {
   const { showToast } = useToast()
+  const { t } = useAppContext()
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set(SOURCES))
   const [industry, setIndustry]     = useState('All')
   const [location, setLocation]     = useState('All')
@@ -90,15 +92,32 @@ export function LeadDiscovery() {
   ]
 
   return (
-    <div className="p-4 space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Radar className="w-4 h-4 text-amber-400" />
-        <h1 className="text-sm font-bold text-text-primary">AI Lead Discovery</h1>
+    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+      {/* Header & Source Transparency Notice */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Radar className="w-4 h-4 text-amber-400 shrink-0" />
+          <h1 className="text-sm font-bold text-text-primary">{t('nav.leadDiscovery', 'AI Lead Discovery')}</h1>
+          <span className="badge-blue text-3xs flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-blue-400" /> SOURCE TRANSPARENCY
+          </span>
+        </div>
+        <span className="text-2xs text-text-muted font-mono hidden md:inline">
+          Public buyer requirements with 100% data provenance
+        </span>
+      </div>
+
+      {/* Transparency Guarantee Bar */}
+      <div className="p-2.5 bg-blue-500/10 border border-blue-500/25 rounded text-2xs text-text-secondary flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Globe className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+          <span><strong>Public Data Guarantee:</strong> All contact information & intent signals are derived from publicly accessible posts (LinkedIn, X, company procurement) with direct link attribution.</span>
+        </div>
+        <span className="badge-success text-3xs shrink-0">COMPLIANT</span>
       </div>
 
       {/* Query Builder */}
-      <div className="panel p-4 space-y-4">
+      <div className="panel p-3 sm:p-4 space-y-3 sm:space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label className="text-2xs text-text-muted uppercase tracking-wide mb-1 block">Keywords</label>
@@ -132,7 +151,7 @@ export function LeadDiscovery() {
               const on = selectedSources.has(src)
               return (
                 <button key={src} onClick={() => toggleSource(src)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs transition-all ${on ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'border-bg-border text-text-muted hover:border-bg-hover'}`}>
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded border text-xs transition-all ${on ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'border-bg-border text-text-muted hover:border-bg-hover'}`}>
                   {on ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />} {src}
                 </button>
               )
@@ -140,13 +159,13 @@ export function LeadDiscovery() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
           <button onClick={runDiscovery} disabled={running}
-            className="btn-primary gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+            className="btn-primary gap-2 disabled:opacity-60 disabled:cursor-not-allowed justify-center w-full sm:w-auto">
             <Play className="w-3.5 h-3.5" />
             {running ? 'AI RUNNING...' : 'RUN AI DISCOVERY'}
           </button>
-          <span className="text-2xs text-text-muted">{filtered.length} matching leads in database</span>
+          <span className="text-2xs text-text-muted text-right sm:text-left">{filtered.length} matching leads in database</span>
         </div>
 
         {/* AI Progress */}

@@ -174,8 +174,8 @@ export function DataTable<T>({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-3 py-2 border-t border-bg-border text-xs text-text-muted">
-          <span>{sorted.length} records — Page {page} of {totalPages}</span>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2 border-t border-bg-border text-xs text-text-muted">
+          <span className="text-2xs sm:text-xs">{sorted.length} records — Page {page} of {totalPages}</span>
           <div className="flex items-center gap-1">
             <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1} className="btn-ghost px-2 py-1 disabled:opacity-40">
               <ChevronLeft className="w-3.5 h-3.5" />

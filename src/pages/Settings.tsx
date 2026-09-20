@@ -60,19 +60,19 @@ export function SettingsPage() {
   // Profile Form State
   const [profile, setProfile] = useState({
     name: 'Tanishq Mehta',
-    email: 'tanishq@demo-nexusai.com',
+    email: 'tanishq@demo-callistoai.com',
     phone: '+91-98765-00001',
-    company: 'NexusAI Solutions',
+    company: 'Callisto AI Solutions',
     timezone: 'Asia/Kolkata',
   })
 
   // Company Form State
   const [company, setCompany] = useState({
-    name: 'NexusAI Solutions Private Limited',
-    website: 'https://nexusai.com',
+    name: 'Callisto AI Solutions Private Limited',
+    website: 'https://callistoai.com',
     industry: 'Enterprise Software & Artificial Intelligence',
     size: '50-200 Employees',
-    address: 'Nexus Cyber Park, Level 4, Outer Ring Road, Bangalore, India - 560103',
+    address: 'Callisto Cyber Park, Level 4, Outer Ring Road, Bangalore, India - 560103',
     taxId: '29AABCN8492K1Z9',
     currency: 'INR (₹)',
     timezone: 'Asia/Kolkata (IST)',
@@ -108,7 +108,7 @@ export function SettingsPage() {
 
   // Business Knowledge Documents State (User Journey Step 2)
   const [documents, setDocuments] = useState([
-    { id: 'DOC-1', name: 'NexusAI_Enterprise_Pitch_Deck.pdf', size: '3.4 MB', uploadedAt: '2 days ago', status: 'INDEXED', type: 'PDF' },
+    { id: 'DOC-1', name: 'CallistoAI_Enterprise_Pitch_Deck.pdf', size: '3.4 MB', uploadedAt: '2 days ago', status: 'INDEXED', type: 'PDF' },
     { id: 'DOC-2', name: 'Product_Catalog_and_Pricing_Q4.docx', size: '1.2 MB', uploadedAt: 'Yesterday', status: 'INDEXED', type: 'DOCX' },
     { id: 'DOC-3', name: 'Technical_Security_FAQ_2026.pdf', size: '840 KB', uploadedAt: '4 hours ago', status: 'INDEXED', type: 'PDF' },
   ])
@@ -120,7 +120,7 @@ export function SettingsPage() {
   const [byoSid, setByoSid] = useState('AC98b472e34fa981275d8209841f')
   const [byoToken, setByoToken] = useState('••••••••••••••••••••••••••••••••')
   const [byoPhone, setByoPhone] = useState('+1 (415) 800-2931')
-  const [byoSipDomain, setByoSipDomain] = useState('nexus-voice.sip.twilio.com')
+  const [byoSipDomain, setByoSipDomain] = useState('callisto-voice.sip.twilio.com')
   const [isTestingCarrier, setIsTestingCarrier] = useState(false)
 
   // Modular Subscription State (User Journey Step 4)
@@ -165,28 +165,28 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <Settings className="w-4 h-4 text-amber-400" />
+    <div className="p-3 sm:p-4">
+      <div className="flex items-center gap-2 mb-3 sm:mb-4">
+        <Settings className="w-4 h-4 text-amber-400 shrink-0" />
         <h1 className="text-sm font-bold text-text-primary">Settings</h1>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
+      <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
         {/* Sidebar tabs */}
-        <div className="w-full md:w-48 shrink-0 panel p-2 h-fit">
+        <div className="w-full md:w-48 shrink-0 panel p-1.5 sm:p-2 h-fit flex md:flex-col overflow-x-auto md:overflow-x-visible gap-1 scrollbar-thin">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-xs transition-colors ${activeTab === t.id ? 'bg-amber-500/10 text-amber-400 font-semibold' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
+              className={`whitespace-nowrap shrink-0 md:shrink flex items-center gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded text-xs transition-colors ${activeTab === t.id ? 'bg-amber-500/10 text-amber-400 font-semibold border border-amber-500/30 md:border-transparent' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
             >
-              {t.icon} {t.label}
+              {t.icon} <span className="text-xs">{t.label}</span>
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="flex-1 panel p-6 space-y-5 min-h-96">
+        <div className="flex-1 panel p-3.5 sm:p-6 space-y-5 min-h-96 min-w-0">
           {/* 1. Profile */}
           {activeTab === 'profile' && (
             <div className="space-y-4">

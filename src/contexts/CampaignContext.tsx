@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { campaigns as initialCampaigns, type Campaign } from '@/data/campaigns'
 
-const STORAGE_KEY = 'nexus_ai_campaigns'
+const STORAGE_KEY = 'callisto_ai_campaigns'
 
 function parseCampaign(c: any): Campaign {
   return {
