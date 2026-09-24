@@ -6,6 +6,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { DevicePreviewBanner } from './DevicePreviewBanner'
 import { getInitials } from '@/lib/utils'
 import type { Language } from '@/lib/i18n'
+import { LANGUAGE_LIST, SUPPORTED_LANGUAGES } from '@/lib/languages'
 
 const currentUser = { name: 'Tanishq Mehta', email: 'tanishq@demo-callistoai.com', role: 'Admin' }
 
@@ -25,11 +26,7 @@ const initialNotifications = [
   { id: 5, text: 'Voice usage at 82% — 870 minutes remaining', time: '2h ago', type: 'warning', path: '/admin/voice-usage' },
 ]
 
-const languages: { code: Language; label: string }[] = [
-  { code: 'en', label: 'English' },
-  { code: 'hi', label: 'हिंदी' },
-  { code: 'gu', label: 'ગુજરાતી' },
-]
+
 
 export function TopBar() {
   const navigate = useNavigate()
@@ -107,26 +104,39 @@ export function TopBar() {
         <div className="relative">
           <button
             onClick={() => { setLangOpen(!langOpen); setNotifOpen(false); setUserOpen(false); setStatusOpen(false) }}
-            className="flex items-center gap-1 px-1.5 sm:px-2 h-7 rounded hover:bg-bg-hover text-text-muted border border-bg-border transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-2 h-7 rounded hover:bg-bg-hover text-text-muted border border-bg-border transition-colors cursor-pointer"
             id="lang-switcher-btn"
+            title="Switch Language"
           >
             <Globe className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-2xs font-semibold text-text-primary uppercase">{language}</span>
+            <span className="text-2xs font-semibold text-text-primary uppercase flex items-center gap-1">
+              <span>{SUPPORTED_LANGUAGES[language]?.flag || '🌐'}</span>
+              <span>{language}</span>
+            </span>
           </button>
           {langOpen && (
-            <div className="absolute right-0 top-9 w-40 max-w-[calc(100vw-24px)] panel border rounded shadow-2xl z-50 animate-fade-in divide-y divide-bg-border">
-              {languages.map(l => (
+            <div className="absolute right-0 top-9 w-48 max-w-[calc(100vw-24px)] panel border rounded shadow-2xl z-50 animate-fade-in divide-y divide-bg-border">
+              <div className="px-3 py-1.5 text-3xs font-semibold text-text-muted uppercase tracking-wider bg-bg-card">
+                Select Platform Language
+              </div>
+              {LANGUAGE_LIST.map(l => (
                 <button
                   key={l.code}
                   onClick={() => {
                     setLanguage(l.code)
                     setLangOpen(false)
-                    showToast('info', 'Language Updated', `Interface language switched to ${l.label}`)
+                    showToast('info', 'Language Updated', `Interface switched to ${l.nativeName} (${l.name})`)
                   }}
                   className={`w-full text-left px-3 py-2 text-xs hover:bg-bg-hover flex items-center justify-between transition-colors ${language === l.code ? 'text-amber-400 font-bold bg-amber-500/10' : 'text-text-secondary'}`}
                 >
-                  <span>{l.label}</span>
-                  {language === l.code && <span className="text-2xs font-bold text-amber-400">✓</span>}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{l.flag}</span>
+                    <div>
+                      <div className="font-medium text-text-primary leading-tight">{l.nativeName}</div>
+                      <div className="text-3xs text-text-muted">{l.name}</div>
+                    </div>
+                  </div>
+                  {language === l.code && <span className="text-xs font-bold text-amber-400">✓</span>}
                 </button>
               ))}
             </div>

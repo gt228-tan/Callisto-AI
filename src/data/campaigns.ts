@@ -22,6 +22,9 @@ export interface Campaign {
   greeting: string
   maxRetries: number
   retryInterval: string
+  type?: 'AI_CALLING_ONLY' | 'AI_DISCOVERY_CALLING'
+  leadIds?: string[]
+  sourceType?: 'UPLOADED_FILE' | 'SELECTED_LEADS' | 'AI_DISCOVERED'
 }
 
 const now = new Date()
@@ -123,14 +126,14 @@ export const campaigns: Campaign[] = [
   },
   {
     id: 'C005',
-    name: 'UAE & GCC Market Pilot',
-    target: 'GCC Enterprise Leads',
-    agent: 'Ahmad (Arabic)',
+    name: 'Gujarat Diamond & Manufacturing Pilot',
+    target: 'Gujarat Industrial & Textile Leads',
+    agent: 'Gaurav (Gujarati)',
     status: 'SCHEDULED',
-    language: 'Arabic / English',
-    voice: 'Native Arabic Male',
+    language: 'Gujarati',
+    voice: 'Native Gujarati Male',
     tone: 'Professional',
-    leads: 85,
+    leads: 185,
     calls: 0,
     answered: 0,
     qualified: 0,
@@ -139,20 +142,20 @@ export const campaigns: Campaign[] = [
     createdAt: daysAgo(2),
     scheduledAt: daysFromNow(5),
     completedAt: null,
-    objective: 'Launch GCC market with Arabic-language AI voice demos. Target CDOs and CTOs at UAE/Saudi enterprise accounts.',
-    greeting: 'مرحباً، معك أحمد من شركة نيكسس AI. هل تتوفر لديك ثلاث دقائق للحديث عن كيفية تحسين مبيعاتكم؟',
+    objective: 'Launch Gujarat regional market with native Gujarati-language AI voice calling. Target Surat, Ahmedabad, and Rajkot industrial accounts.',
+    greeting: 'નમસ્તે, હું ગૌરવ બોલું છું Callisto AI Solutions માંથી. શું તમારી પાસે તમારા સેલ્સ પાઇપલાઇન ઓટોમેશન માટે 2 મિનિટનો સમય છે?',
     maxRetries: 3,
-    retryInterval: '72 hours',
+    retryInterval: '48 hours',
   },
   {
     id: 'C006',
-    name: 'RetailTech South India',
-    target: 'Tamil/Kannada Retail Leads',
-    agent: 'Kavitha (Tamil)',
+    name: 'Western India Retail & MSME',
+    target: 'Gujarat & Maharashtra MSME Leads',
+    agent: 'Swara (Hindi / Gujarati)',
     status: 'PAUSED',
-    language: 'Tamil / English',
-    voice: 'Native Tamil Female',
-    tone: 'Friendly',
+    language: 'Hindi / Gujarati',
+    voice: 'Native Hindi Female',
+    tone: 'Consultative',
     leads: 210,
     calls: 145,
     answered: 89,
@@ -162,8 +165,8 @@ export const campaigns: Campaign[] = [
     createdAt: daysAgo(18),
     scheduledAt: daysAgo(16),
     completedAt: null,
-    objective: 'Target South India retail and e-commerce companies with Tamil-language AI voice automation for customer outreach.',
-    greeting: 'வணக்கம், நான் கவிதா, Callisto AI Solutions-இலிருந்து பேசுகிறேன். உங்கள் வணிகத்திற்கு AI தொலைபேசி தீர்வு பற்றி பேசலாமா?',
+    objective: 'Target Western India retail and MSME companies with bilingual Hindi and Gujarati AI voice automation for customer outreach.',
+    greeting: 'नमस्ते, मैं स्वरा बोल रही हूँ Callisto AI Solutions से। क्या हम आपकी सेल्स टीम के ऑटोमेशन वर्कफ़्लो के बारे में 2 मिनट बात कर सकते हैं?',
     maxRetries: 2,
     retryInterval: '24 hours',
   },

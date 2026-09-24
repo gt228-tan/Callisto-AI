@@ -26,45 +26,18 @@ interface ICPPersona {
 export function BusinessOnboarding() {
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { t } = useAppContext()
+  const { t, businessProfile, updateBusinessProfile } = useAppContext()
 
-  const [companyUrl, setCompanyUrl] = useState('https://callistoai.com')
-  const [companyName, setCompanyName] = useState('Callisto AI Solutions')
-  const [industry, setIndustry] = useState('Enterprise B2B Software & AI')
-  const [businessDesc, setBusinessDesc] = useState(
-    'Callisto AI provides autonomous conversational AI voice agents and predictive buyer intent intelligence for enterprise revenue teams, enabling automated multilingual qualification and CRM pipeline conversion.'
-  )
+  const [companyUrl, setCompanyUrl] = useState(businessProfile.companyUrl)
+  const [companyName, setCompanyName] = useState(businessProfile.companyName)
+  const [industry, setIndustry] = useState(businessProfile.industry)
+  const [businessDesc, setBusinessDesc] = useState(businessProfile.businessDesc)
 
   const [isScanning, setIsScanning] = useState(false)
   const [scanStep, setScanStep] = useState('')
   const [hasScanned, setHasScanned] = useState(true)
 
-  const [products, setProducts] = useState<ProductItem[]>([
-    {
-      id: 'p1',
-      name: 'Autonomous AI Voice SDR',
-      category: 'Conversational Voice AI',
-      description: 'Human-like multilingual voice agent that dials prospects, handles live technical FAQs, drops voicemails, and schedules calendar demos.',
-      targetPrice: '$1,200 / month + voice usage',
-      valueProp: '10x SDR outreach throughput with zero latency and 31% qualification rate',
-    },
-    {
-      id: 'p2',
-      name: 'Public Intent Lead Discovery',
-      category: 'Lead Intelligence & Scraping',
-      description: 'Real-time monitoring of public buyer requirement posts on LinkedIn, X, public directories, and RFPs with verified provenance.',
-      targetPrice: '$800 / month',
-      valueProp: 'Catch active buyers with urgent projects before competitors reach them',
-    },
-    {
-      id: 'p3',
-      name: 'BANT Predictive Lead Qualifier',
-      category: 'Revenue Analytics',
-      description: 'AI scoring engine that validates budget, authority, urgency, and need clarity before human AE handover.',
-      targetPrice: '$500 / month',
-      valueProp: 'Eliminate 85% of unqualified sales meetings for account executives',
-    },
-  ])
+  const [products, setProducts] = useState<ProductItem[]>(businessProfile.products)
 
   const [documents, setDocuments] = useState([
     { name: 'CallistoAI_Enterprise_Pitch_2026.pdf', size: '3.8 MB', date: 'Indexed 2 hours ago', status: 'SYNCHRONIZED' },
@@ -72,33 +45,9 @@ export function BusinessOnboarding() {
     { name: 'Security_Architecture_SOC2.pdf', size: '920 KB', date: 'Indexed 3 days ago', status: 'SYNCHRONIZED' },
   ])
 
-  const [personas, setPersonas] = useState<ICPPersona[]>([
-    {
-      title: 'VP / Head of Inside Sales',
-      department: 'Revenue & Sales Operations',
-      painPoints: ['Slow outbound dial rates', 'High SDR turnover', 'Inconsistent qualification quality'],
-      budgetInfluence: 'Final Sign-off',
-    },
-    {
-      title: 'Chief Technology Officer (CTO)',
-      department: 'Engineering & Technology',
-      painPoints: ['Complex telephony integration', 'Data privacy & encryption compliance', 'API latency'],
-      budgetInfluence: 'High',
-    },
-    {
-      title: 'Director of Demand Generation',
-      department: 'Growth & Marketing',
-      painPoints: ['Low conversion from inbound leads', 'Lack of source transparency', 'Delayed follow-ups'],
-      budgetInfluence: 'Influencer',
-    },
-  ])
+  const [personas, setPersonas] = useState<ICPPersona[]>(businessProfile.personas)
 
-  const [discoveryQueries, setDiscoveryQueries] = useState([
-    '"looking for sales automation" OR "need voice ai agent"',
-    '"evaluating conversational ai SDR" site:linkedin.com',
-    '"RFPs for outbound calling platform" OR "telephony integration"',
-    '"seeking B2B lead generation" Bangalore OR "San Francisco"',
-  ])
+  const [discoveryQueries, setDiscoveryQueries] = useState(businessProfile.discoveryQueries)
 
   async function handleScanUrl() {
     if (!companyUrl) {
@@ -122,6 +71,24 @@ export function BusinessOnboarding() {
       await new Promise(r => setTimeout(r, 450))
     }
 
+    const updatedQueries = [
+      `"looking for ${products[0]?.name || 'automation'}" site:linkedin.com`,
+      `"need ${companyName} alternative" OR "recommend ${industry}"`,
+      `site:reddit.com/r/sales "outbound calling" OR "${products[0]?.category || 'SDR'}"`,
+      `filetype:pdf "RFP" "${industry}" 2026`,
+    ]
+    setDiscoveryQueries(updatedQueries)
+
+    updateBusinessProfile({
+      companyUrl,
+      companyName,
+      industry,
+      businessDesc,
+      products,
+      personas,
+      discoveryQueries: updatedQueries,
+    })
+
     setIsScanning(false)
     setHasScanned(true)
     showToast('success', 'Business Understood', 'AI successfully generated ICP, buyer personas, and discovery triggers from your website')
@@ -136,11 +103,22 @@ export function BusinessOnboarding() {
       targetPrice: '$2,500 one-time',
       valueProp: 'Tailored enterprise rollout with dedicated SLA',
     }
-    setProducts(prev => [...prev, newP])
+    const updated = [...products, newP]
+    setProducts(updated)
+    updateBusinessProfile({ products: updated })
     showToast('success', 'Product Added', 'New offering added to AI knowledge base')
   }
 
   function handleApplyToDiscovery() {
+    updateBusinessProfile({
+      companyUrl,
+      companyName,
+      industry,
+      businessDesc,
+      products,
+      personas,
+      discoveryQueries,
+    })
     showToast('success', 'ICP Applied', 'Applying target personas and queries to AI Lead Discovery...')
     navigate('/lead-discovery')
   }

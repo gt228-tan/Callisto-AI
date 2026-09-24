@@ -1,4 +1,6 @@
-export type Language = 'en' | 'hi' | 'gu'
+import type { SupportedLanguage } from './languages'
+
+export type Language = SupportedLanguage
 
 export const translations: Record<Language, Record<string, string>> = {
   en: {
@@ -15,7 +17,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.marketIntel':           'Market Intelligence',
     'nav.pipeline':              'Sales Pipeline',
     'nav.analytics':             'Analytics',
-    'nav.crm':                   'CRM',
+    'nav.crm':                   'CRM & Lead Sources',
     'nav.settings':              'Settings',
     'nav.adminOverview':         'Admin Overview',
     'nav.users':                 'Users',
@@ -126,6 +128,16 @@ export const translations: Record<Language, Record<string, string>> = {
     'campaigns.answered':        'Answered',
     'campaigns.convRate':        'Conv Rate',
     'campaigns.locationSched':   'Location & Timezone Scheduling',
+
+    // Multilingual & Location
+    'multilingual.title':        'Multilingual Voice Intelligence',
+    'multilingual.autoDetected': 'Auto-detected from Location',
+    'multilingual.selectLang':   'Select Language',
+    'multilingual.subtitles':    'Show English Subtitles',
+    'multilingual.voiceModel':   'Neural Voice Model',
+    'multilingual.codeSwitch':   'Code-Switching (Hinglish/Gujlish)',
+    'common.language':           'Language',
+    'common.callRegional':       'AI Call in Native Language',
   },
 
   hi: {
@@ -142,7 +154,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.marketIntel':           'बाज़ार विश्लेषण',
     'nav.pipeline':              'बिक्री पाइपलाइन',
     'nav.analytics':             'विश्लेषण',
-    'nav.crm':                   'CRM एकीकरण',
+    'nav.crm':                   'CRM एवं लीड स्रोत',
     'nav.settings':              'सेटिंग्स',
     'nav.adminOverview':         'एडमिन डैशबोर्ड',
     'nav.users':                 'उपयोगकर्ता',
@@ -253,6 +265,16 @@ export const translations: Record<Language, Record<string, string>> = {
     'campaigns.answered':        'उत्तर प्राप्त',
     'campaigns.convRate':        'रूपांतरण दर',
     'campaigns.locationSched':   'स्थान एवं समय क्षेत्र अनुसार शेड्यूलिंग',
+
+    // Multilingual & Location
+    'multilingual.title':        'बहुभाषी वॉइस इंटेलिजेंस',
+    'multilingual.autoDetected': 'स्थान से स्वतः चयनित',
+    'multilingual.selectLang':   'भाषा चुनें',
+    'multilingual.subtitles':    'अंग्रेज़ी अनुवाद देखें',
+    'multilingual.voiceModel':   'न्यूरल वॉइस मॉडल',
+    'multilingual.codeSwitch':   'कोड-स्विचिंग (हिंग्लिश/गुज्लिश)',
+    'common.language':           'भाषा',
+    'common.callRegional':       'मातृभाषा में AI कॉल करें',
   },
 
   gu: {
@@ -269,7 +291,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.marketIntel':           'બજાર વિશ્લેષણ',
     'nav.pipeline':              'વેચાણ પાઇપલાઇન',
     'nav.analytics':             'વિશ્લેષણ',
-    'nav.crm':                   'CRM એકીકરણ',
+    'nav.crm':                   'CRM અને લીડ સ્ત્રોતો',
     'nav.settings':              'સેટિંગ્સ',
     'nav.adminOverview':         'એડમિન સારાંશ',
     'nav.users':                 'વપરાશકર્તા',
@@ -380,6 +402,16 @@ export const translations: Record<Language, Record<string, string>> = {
     'campaigns.answered':        'ઉત્તર મળેલ',
     'campaigns.convRate':        'રૂપાંતરણ દર',
     'campaigns.locationSched':   'સ્થાન અને સમય ક્ષેત્ર મુજબ શેડ્યૂલ',
+
+    // Multilingual & Location
+    'multilingual.title':        'બહુભાષી વૉઇસ ઇન્ટેલિજન્સ',
+    'multilingual.autoDetected': 'સ્થાન પરથી આપમેળે પસંદ કરેલ',
+    'multilingual.selectLang':   'ભાષા પસંદ કરો',
+    'multilingual.subtitles':    'અંગ્રેજી સબટાઈટલ જુઓ',
+    'multilingual.voiceModel':   'ન્યુરલ વૉઇસ મોડેલ',
+    'multilingual.codeSwitch':   'કોડ-સ્વિચિંગ (હિંગ્લિશ/ગુજલિશ)',
+    'common.language':           'ભાષા',
+    'common.callRegional':       'માતૃભાષામાં AI કૉલ શરૂ કરો',
   },
 }
 

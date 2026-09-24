@@ -1,152 +1,130 @@
-import { useState, useRef, ChangeEvent, DragEvent } from 'react'
+import { useState, useRef, ChangeEvent, DragEvent, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Upload, FileText, CheckCircle2, AlertCircle, X, Download,
-  Sparkles, RefreshCw, Trash2, Check
+  Sparkles, RefreshCw, Trash2, Check, ArrowRight, ArrowLeft,
+  Users, PhoneCall, AlertTriangle, Filter, Eye, ChevronDown,
+  Layers, ShieldCheck, HelpCircle, Phone, Mail, Building, MapPin, Briefcase
 } from 'lucide-react'
-import { exportToCSV } from '@/lib/exportCsv'
 import type { Lead } from '@/data/leads'
-
-interface ParsedLeadRow {
-  name: string
-  company: string
-  email: string
-  phone: string
-  industry: string
-  location: string
-  jobTitle?: string
-}
+import {
+  parseSpreadsheetFile,
+  autoDetectFieldMapping,
+  validateLeadRows,
+  buildLeadsFromValidatedRows,
+  downloadCallistoTemplate,
+  type RawSpreadsheetData,
+  type FieldMapping,
+  type SpreadsheetValidationSummary,
+  type DuplicateStrategy,
+  type ValidatedLeadRow
+} from '@/lib/excelLeads'
+import { useLeads } from '@/contexts/LeadContext'
+import { useCampaigns } from '@/contexts/CampaignContext'
+import { useToast } from '@/contexts/ToastContext'
+import { SUPPORTED_LANGUAGES } from '@/lib/languages'
 
 interface ImportLeadsModalProps {
   isOpen: boolean
   onClose: () => void
-  onImportSuccess?: (count: number, parsedLeads: Partial<Lead>[]) => void
+  onImportSuccess?: (count: number, newLeads: Partial<Lead>[]) => void
+  /** If provided, leads will be directly assigned to this campaign */
+  targetCampaignId?: string
 }
 
-const sample120LeadsData: ParsedLeadRow[] = [
-  { name: 'Rahul Mehta', company: 'Acme Digital Solutions', email: 'rahul.mehta@acmedigital.com', phone: '+91 98201 44892', industry: 'IT & Cloud Services', location: 'Bangalore, India', jobTitle: 'VP of Technology' },
-  { name: 'Sarah Johnson', company: 'NexaFinance Corp', email: 'sarah.j@nexafinance.com', phone: '+1 (415) 892-0192', industry: 'FinTech & Banking', location: 'San Francisco, USA', jobTitle: 'Head of Inside Sales' },
-  { name: 'Kavitha Reddy', company: 'Bharat Insurance Group', email: 'kavitha.r@bharatinsure.com', phone: '+91 94401 22819', industry: 'Insurance', location: 'Hyderabad, India', jobTitle: 'Director of Customer Operations' },
-  { name: 'Oliver Schmidt', company: 'Deutech Manufacturing', email: 'oliver.s@deutech.de', phone: '+49 89 2039 4810', industry: 'Industrial IoT', location: 'Munich, Germany', jobTitle: 'Chief Digital Officer' },
-  { name: 'Mohammed Al-Rashidi', company: 'Emirates Future Tech', email: 'mohammed@emiratesft.ae', phone: '+971 4 391 0022', industry: 'Enterprise Software', location: 'Dubai, UAE', jobTitle: 'VP Business Development' },
-  { name: 'Priya Sharma', company: 'TechVenture Labs', email: 'priya.s@techventure.in', phone: '+91 99201 88371', industry: 'AI & Data Platforms', location: 'Mumbai, India', jobTitle: 'Head of Growth' },
-  { name: 'Marcus Johnson', company: 'Vertex Solutions', email: 'marcus.j@vertexsolutions.io', phone: '+1 (312) 555-0199', industry: 'Cybersecurity', location: 'Chicago, USA', jobTitle: 'SDR Team Lead' },
-  { name: 'Chen Wei', company: 'Pacific Rim Logistics', email: 'chen.wei@pacificrim.sg', phone: '+65 6721 9901', industry: 'Supply Chain', location: 'Singapore', jobTitle: 'Operations Director' },
-]
+type WizardStep = 'upload' | 'mapping' | 'validation' | 'complete'
 
-export function ImportLeadsModal({ isOpen, onClose, onImportSuccess }: ImportLeadsModalProps) {
+export function ImportLeadsModal({ isOpen, onClose, onImportSuccess, targetCampaignId }: ImportLeadsModalProps) {
+  const navigate = useNavigate()
+  const { showToast } = useToast()
+  const { leadsList, addLeads } = useLeads()
+  const { addCampaign } = useCampaigns()
+
+  const [step, setStep] = useState<WizardStep>('upload')
   const [isDragging, setIsDragging] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<{ name: string; size: string; count: number } | null>(null)
-  const [parsedRows, setParsedRows] = useState<ParsedLeadRow[]>([])
-  const [detectedColumns, setDetectedColumns] = useState<string[]>([])
-  const [isImporting, setIsImporting] = useState(false)
+  const [isParsing, setIsParsing] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
+
+  // Uploaded spreadsheet data
+  const [fileName, setFileName] = useState<string>('')
+  const [fileSizeStr, setFileSizeStr] = useState<string>('')
+  const [spreadsheetData, setSpreadsheetData] = useState<RawSpreadsheetData | null>(null)
+
+  // Field mapping
+  const [mapping, setMapping] = useState<FieldMapping>({})
+
+  // Validation & duplicate results
+  const [validationSummary, setValidationSummary] = useState<SpreadsheetValidationSummary | null>(null)
+  const [duplicateStrategy, setDuplicateStrategy] = useState<DuplicateStrategy>('skip')
+  const [activeReviewTab, setActiveReviewTab] = useState<'all' | 'valid' | 'duplicates' | 'errors'>('all')
+  const [skipInvalidRows, setSkipInvalidRows] = useState(true)
+
+  // Import execution
+  const [isExecuting, setIsExecuting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
-  const [importStep, setImportStep] = useState('')
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [importStepText, setImportStepText] = useState('')
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  if (!isOpen) return null
-
   function resetState() {
-    setSelectedFile(null)
-    setParsedRows([])
-    setDetectedColumns([])
-    setErrorMessage(null)
-    setIsImporting(false)
+    setStep('upload')
+    setIsDragging(false)
+    setIsParsing(false)
+    setParseError(null)
+    setFileName('')
+    setFileSizeStr('')
+    setSpreadsheetData(null)
+    setMapping({})
+    setValidationSummary(null)
+    setDuplicateStrategy('skip')
+    setActiveReviewTab('all')
+    setSkipInvalidRows(true)
+    setIsExecuting(false)
     setImportProgress(0)
-    setImportStep('')
+    setImportStepText('')
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   function handleClose() {
-    if (isImporting) return
+    if (isExecuting) return
     resetState()
     onClose()
   }
 
-  function parseCSVContent(text: string, fileName: string, fileSizeStr: string) {
-    try {
-      const lines = text.split(/\r\n|\n/).filter(line => line.trim().length > 0)
-      if (lines.length < 2) {
-        setErrorMessage('The selected CSV file appears to be empty or missing data rows.')
-        return
-      }
-
-      // Parse headers
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase())
-      const colsFound: string[] = []
-      if (headers.some(h => h.includes('name'))) colsFound.push('Name')
-      if (headers.some(h => h.includes('comp'))) colsFound.push('Company')
-      if (headers.some(h => h.includes('email') || h.includes('mail'))) colsFound.push('Email')
-      if (headers.some(h => h.includes('phone') || h.includes('mobile') || h.includes('contact'))) colsFound.push('Phone')
-      if (headers.some(h => h.includes('indus') || h.includes('sector'))) colsFound.push('Industry')
-      if (headers.some(h => h.includes('loc') || h.includes('city') || h.includes('country'))) colsFound.push('Location')
-      if (headers.some(h => h.includes('title') || h.includes('role') || h.includes('job'))) colsFound.push('Job Title')
-
-      const nameIdx = headers.findIndex(h => h.includes('name'))
-      const companyIdx = headers.findIndex(h => h.includes('comp'))
-      const emailIdx = headers.findIndex(h => h.includes('email') || h.includes('mail'))
-      const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('contact'))
-      const industryIdx = headers.findIndex(h => h.includes('indus') || h.includes('sector'))
-      const locationIdx = headers.findIndex(h => h.includes('loc') || h.includes('city') || h.includes('country'))
-      const titleIdx = headers.findIndex(h => h.includes('title') || h.includes('role') || h.includes('job'))
-
-      const rows: ParsedLeadRow[] = []
-      for (let i = 1; i < lines.length; i++) {
-        // basic CSV comma split
-        const parts = lines[i].split(',').map(p => p.trim().replace(/^["']|["']$/g, ''))
-        const name = (nameIdx !== -1 ? parts[nameIdx] : parts[0]) || `Lead #${i}`
-        const company = (companyIdx !== -1 ? parts[companyIdx] : parts[1]) || 'Company'
-        const email = (emailIdx !== -1 ? parts[emailIdx] : parts[2]) || `contact${i}@example.com`
-        const phone = (phoneIdx !== -1 ? parts[phoneIdx] : parts[3]) || '+1 (555) 000-0000'
-        const industry = (industryIdx !== -1 ? parts[industryIdx] : parts[4]) || 'Technology'
-        const location = (locationIdx !== -1 ? parts[locationIdx] : parts[5]) || 'Global'
-        const jobTitle = titleIdx !== -1 ? parts[titleIdx] : 'Decision Maker'
-
-        rows.push({ name, company, email, phone, industry, location, jobTitle })
-      }
-
-      setDetectedColumns(colsFound.length > 0 ? colsFound : ['Name', 'Company', 'Email', 'Phone', 'Industry', 'Location'])
-      setParsedRows(rows)
-      setSelectedFile({
-        name: fileName,
-        size: fileSizeStr,
-        count: rows.length,
-      })
-      setErrorMessage(null)
-    } catch {
-      setErrorMessage('Could not parse CSV file. Please verify comma separation and utf-8 encoding.')
-    }
-  }
-
-  function handleFile(file: File) {
-    if (!file.name.toLowerCase().endsWith('.csv') && file.type !== 'text/csv') {
-      setErrorMessage('Please upload a valid .csv file format.')
-      return
-    }
-
+  // Parse any file (CSV, TSV, XLSX, XLS)
+  async function processFile(file: File) {
+    setIsParsing(true)
+    setParseError(null)
     const sizeStr = file.size > 1024 * 1024
       ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
       : `${Math.round(file.size / 1024)} KB`
 
-    const reader = new FileReader()
-    reader.onload = e => {
-      const text = e.target?.result as string
-      if (text) {
-        parseCSVContent(text, file.name, sizeStr)
+    try {
+      const data = await parseSpreadsheetFile(file)
+      if (data.rows.length === 0) {
+        throw new Error('Spreadsheet does not contain any valid data rows.')
       }
+
+      setFileName(file.name)
+      setFileSizeStr(sizeStr)
+      setSpreadsheetData(data)
+
+      // Auto-detect field mapping
+      const detected = autoDetectFieldMapping(data.headers)
+      setMapping(detected)
+
+      // Move to mapping step
+      setStep('mapping')
+    } catch (err: any) {
+      setParseError(err.message || 'Failed to parse file. Please verify CSV/Excel format.')
+    } finally {
+      setIsParsing(false)
     }
-    reader.onerror = () => {
-      setErrorMessage('Failed to read the file. Please try again.')
-    }
-    reader.readAsText(file)
   }
 
   function onFileInputChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (file) {
-      handleFile(file)
-    }
+    if (file) processFile(file)
   }
 
   function onDragOver(e: DragEvent<HTMLDivElement>) {
@@ -163,362 +141,940 @@ export function ImportLeadsModal({ isOpen, onClose, onImportSuccess }: ImportLea
     e.preventDefault()
     setIsDragging(false)
     const file = e.dataTransfer.files?.[0]
-    if (file) {
-      handleFile(file)
+    if (file) processFile(file)
+  }
+
+  // Load the standard Callisto template directly
+  async function loadTemplateData() {
+    setIsParsing(true)
+    setParseError(null)
+    try {
+      // Mock loading of the standard 11-lead template
+      const templateHeaders = ['Name', 'Company', 'Email', 'Phone', 'Job Title', 'Industry', 'Location']
+      const templateRows = [
+        { Name: 'Rahul Mehta', Company: 'Acme Digital Solutions', Email: 'rahul.mehta@acmedigital.com', Phone: '+91 98201 44892', 'Job Title': 'VP of Technology', Industry: 'IT & Cloud Services', Location: 'Bangalore, India' },
+        { Name: 'Sarah Johnson', Company: 'NexaFinance Corp', Email: 'sarah.j@nexafinance.com', Phone: '+1 (415) 892-0192', 'Job Title': 'Head of Inside Sales', Industry: 'FinTech & Banking', Location: 'San Francisco, USA' },
+        { Name: 'Kavitha Reddy', Company: 'Bharat Insurance Group', Email: 'kavitha.r@bharatinsure.com', Phone: '+91 94401 22819', 'Job Title': 'Director of Customer Operations', Industry: 'Insurance', Location: 'Hyderabad, India' },
+        { Name: 'Oliver Schmidt', Company: 'Deutech Manufacturing', Email: 'oliver.s@deutech.de', Phone: '+49 89 2039 4810', 'Job Title': 'Chief Digital Officer', Industry: 'Industrial IoT', Location: 'Munich, Germany' },
+        { Name: 'Mohammed Al-Rashidi', Company: 'Emirates Future Tech', Email: 'mohammed@emiratesft.ae', Phone: '+971 4 391 0022', 'Job Title': 'VP Business Development', Industry: 'Enterprise Software', Location: 'Dubai, UAE' },
+        { Name: 'Aarav Sharma', Company: 'NovaByte Solutions', Email: 'aarav.sharma@example.com', Phone: '+91 90000 10001', 'Job Title': 'Founder & CEO', Industry: 'Software & IT', Location: 'Ahmedabad, India' },
+        { Name: 'Riya Patel', Company: 'PixelCraft Studio', Email: 'riya.patel@example.com', Phone: '+91 90000 10002', 'Job Title': 'Creative Director', Industry: 'Design & Creative', Location: 'Mumbai, India' },
+        { Name: 'Karan Mehta', Company: 'GrowthSphere Media', Email: 'karan.mehta@example.com', Phone: '+91 90000 10003', 'Job Title': 'Marketing Manager', Industry: 'Digital Marketing', Location: 'Bengaluru, India' },
+        { Name: 'Ananya Shah', Company: 'FinEdge Technologies', Email: 'ananya.shah@example.com', Phone: '+91 90000 10004', 'Job Title': 'Product Manager', Industry: 'FinTech', Location: 'Pune, India' },
+      ]
+
+      setFileName('callisto_leads_import_template.xlsx')
+      setFileSizeStr('11.2 KB')
+      setSpreadsheetData({
+        sheetNames: ['callisto_leads_import_template'],
+        activeSheet: 'callisto_leads_import_template',
+        headers: templateHeaders,
+        rows: templateRows,
+        totalRows: templateRows.length,
+      })
+      setMapping({
+        name: 'Name',
+        company: 'Company',
+        email: 'Email',
+        phone: 'Phone',
+        jobTitle: 'Job Title',
+        industry: 'Industry',
+        location: 'Location',
+      })
+      setStep('mapping')
+    } catch {
+      setParseError('Failed to load template data.')
+    } finally {
+      setIsParsing(false)
     }
   }
 
+  // Generate 120 leads programmatic demo
   function loadSample120Leads() {
-    // Generates 120 realistic leads programmatically
     const titles = ['VP of Sales', 'Chief Technology Officer', 'Head of Revenue Ops', 'Director of Inside Sales', 'IT Infrastructure Lead']
     const companies = ['Acme Digital Solutions', 'NexaFinance Corp', 'Bharat Insurance Group', 'Deutech Mfg', 'Emirates Future Tech', 'CloudScale Inc', 'FinPro Advisors', 'RetailEdge Technologies']
     const industries = ['Enterprise Software', 'FinTech & Banking', 'Insurance', 'Cloud Infrastructure', 'Cybersecurity', 'Industrial IoT']
-    const locations = ['Bangalore, India', 'San Francisco, USA', 'Hyderabad, India', 'London, UK', 'Singapore', 'Munich, Germany', 'Dubai, UAE']
+    const locations = ['Bangalore, India', 'San Francisco, USA', 'Hyderabad, India', 'London, UK', 'Singapore', 'Munich, Germany', 'Dubai, UAE', 'Ahmedabad, India']
     const firstNames = ['Rahul', 'Sarah', 'Kavitha', 'Oliver', 'Mohammed', 'Priya', 'Marcus', 'Chen', 'Deepa', 'Suresh', 'Ananya', 'David', 'Elena', 'Vikram']
     const lastNames = ['Mehta', 'Johnson', 'Reddy', 'Schmidt', 'Al-Rashidi', 'Sharma', 'Patel', 'Wei', 'Krishnan', 'Pillai', 'Deshmukh', 'Williams']
 
-    const generated: ParsedLeadRow[] = []
+    const generated: Record<string, any>[] = []
     for (let i = 0; i < 120; i++) {
       const fn = firstNames[i % firstNames.length]
       const ln = lastNames[(i * 3) % lastNames.length]
       const comp = companies[i % companies.length]
-      const ind = industries[i % industries.length]
-      const loc = locations[i % locations.length]
-      const title = titles[i % titles.length]
       const cleanCompDomain = comp.toLowerCase().replace(/[^a-z]/g, '').slice(0, 12)
 
       generated.push({
-        name: `${fn} ${ln}`,
-        company: comp,
-        email: `${fn.toLowerCase()}.${ln.toLowerCase()}@${cleanCompDomain}.com`,
-        phone: `+${(i % 3 === 0 ? '91 98' : i % 3 === 1 ? '1 415 ' : '44 20 ')}${Math.floor(1000000 + Math.random() * 8999999)}`,
-        industry: ind,
-        location: loc,
-        jobTitle: title,
+        'Full Name': `${fn} ${ln}`,
+        'Organization': comp,
+        'Work Email': `${fn.toLowerCase()}.${ln.toLowerCase()}@${cleanCompDomain}.com`,
+        'Phone Number': `+${(i % 3 === 0 ? '91 98' : i % 3 === 1 ? '1 415 ' : '44 20 ')}${Math.floor(1000000 + Math.random() * 8999999)}`,
+        'Industry Vertical': industries[i % industries.length],
+        'Primary Location': locations[i % locations.length],
+        'Designation': titles[i % titles.length],
       })
     }
 
-    setDetectedColumns(['Name', 'Company', 'Email', 'Phone', 'Industry', 'Location', 'Job Title'])
-    setParsedRows(generated)
-    setSelectedFile({
-      name: 'enterprise_high_intent_prospects_120.csv',
-      size: '28.4 KB',
-      count: 120,
+    setFileName('enterprise_prospects_120_leads.csv')
+    setFileSizeStr('28.4 KB')
+    setSpreadsheetData({
+      sheetNames: ['Leads'],
+      activeSheet: 'Leads',
+      headers: ['Full Name', 'Organization', 'Work Email', 'Phone Number', 'Industry Vertical', 'Primary Location', 'Designation'],
+      rows: generated,
+      totalRows: 120,
     })
-    setErrorMessage(null)
+    setMapping({
+      name: 'Full Name',
+      company: 'Organization',
+      email: 'Work Email',
+      phone: 'Phone Number',
+      jobTitle: 'Designation',
+      industry: 'Industry Vertical',
+      location: 'Primary Location',
+    })
+    setStep('mapping')
   }
 
-  function downloadSampleTemplate() {
-    exportToCSV(
-      'callisto_leads_import_template.csv',
-      sample120LeadsData.slice(0, 5),
-      [
-        { key: 'name', label: 'Name' },
-        { key: 'company', label: 'Company' },
-        { key: 'email', label: 'Email' },
-        { key: 'phone', label: 'Phone' },
-        { key: 'jobTitle', label: 'Job Title' },
-        { key: 'industry', label: 'Industry' },
-        { key: 'location', label: 'Location' },
-      ]
-    )
+  // Proceed from Mapping to Validation step
+  function proceedToValidation() {
+    if (!spreadsheetData) return
+    const summary = validateLeadRows(spreadsheetData.rows, mapping, leadsList)
+    setValidationSummary(summary)
+    setStep('validation')
   }
 
-  async function executeImport() {
-    const leadsToImport = parsedRows.length > 0 ? parsedRows : sample120LeadsData
-    const count = selectedFile?.count || leadsToImport.length || 120
+  // Filtered rows for the review tab
+  const displayedRows = useMemo(() => {
+    if (!validationSummary) return []
+    switch (activeReviewTab) {
+      case 'valid':
+        return validationSummary.rows.filter(r => r.status === 'VALID')
+      case 'duplicates':
+        return validationSummary.rows.filter(r => r.isInternalDuplicate || r.isExistingDuplicate)
+      case 'errors':
+        return validationSummary.rows.filter(r => r.status === 'INVALID')
+      default:
+        return validationSummary.rows
+    }
+  }, [validationSummary, activeReviewTab])
 
-    setIsImporting(true)
-    setImportProgress(15)
-    setImportStep('Parsing lead records & normalizing phone numbers...')
+  // Execute Import
+  async function handleImport(mode: 'PIPELINE' | 'AI_CALLING_ONLY') {
+    if (!validationSummary) return
 
-    await new Promise(r => setTimeout(r, 400))
+    setIsExecuting(true)
+    setImportProgress(20)
+    setImportStepText('Normalizing phone numbers & international E.164 formats...')
+
+    await new Promise(r => setTimeout(r, 300))
     setImportProgress(45)
-    setImportStep('Validating corporate emails & domain deliverability...')
+    setImportStepText('Validating corporate emails and language routing...')
 
-    await new Promise(r => setTimeout(r, 450))
-    setImportProgress(75)
-    setImportStep('Checking for existing duplicate CRM contacts...')
+    await new Promise(r => setTimeout(r, 300))
+    setImportProgress(70)
+    setImportStepText(
+      duplicateStrategy === 'skip'
+        ? 'Deduplicating existing CRM and system leads...'
+        : duplicateStrategy === 'update'
+        ? 'Merging updated contact attributes into existing leads...'
+        : 'Preparing independent records...'
+    )
 
-    await new Promise(r => setTimeout(r, 400))
+    await new Promise(r => setTimeout(r, 300))
+    setImportProgress(90)
+    setImportStepText(
+      mode === 'AI_CALLING_ONLY'
+        ? 'Configuring AI Voice Agent direct dialing campaign...'
+        : 'Adding leads to active intelligence pipeline...'
+    )
+
+    const isAiCalling = mode === 'AI_CALLING_ONLY'
+    const { newLeads, updatedLeadMap } = buildLeadsFromValidatedRows(
+      validationSummary.rows,
+      duplicateStrategy,
+      {
+        sourceUrl: fileName || 'CSV/Excel Upload',
+        isAiCallingOnly: isAiCalling,
+        campaignId: targetCampaignId,
+        tags: isAiCalling ? ['AI Calling Only', 'Direct Upload'] : ['Spreadsheet Import'],
+      }
+    )
+
+    // Save into LeadContext
+    const result = addLeads(newLeads, duplicateStrategy, updatedLeadMap)
+
+    await new Promise(r => setTimeout(r, 250))
     setImportProgress(100)
-    setImportStep('Sync complete! Queuing leads for AI qualification...')
+    setIsExecuting(false)
 
-    await new Promise(r => setTimeout(r, 350))
+    // Trigger parent callback
+    const totalProcessed = result.added + result.updated
+    onImportSuccess?.(totalProcessed, newLeads)
 
-    const newLeads: Partial<Lead>[] = leadsToImport.map((row, idx) => ({
-      id: `LEAD-IMP-${Date.now()}-${idx}`,
-      name: row.name,
-      company: row.company,
-      email: row.email,
-      phone: row.phone,
-      industry: row.industry,
-      location: row.location,
-      jobTitle: row.jobTitle || 'Executive Contact',
-      country: row.location.includes(',') ? row.location.split(',')[1].trim() : 'Global',
-      intent: (idx % 3 === 0 ? 'HIGH' : idx % 3 === 1 ? 'MEDIUM' : 'LOW') as any,
-      intentScore: Math.floor(Math.random() * 25) + 72,
-      status: 'NEW' as const,
-      source: 'CRM' as const,
-      sourceUrl: 'CSV File Upload Import',
-      discoveredAt: new Date(),
-      enrichedAt: null,
-      lastActivity: new Date(),
-      requirement: `Imported via CSV batch upload. Interested in AI sales voice outreach automation.`,
-      aiReasoning: 'Newly ingested CRM contact awaiting automated intent enrichment and outreach call scheduling.',
-      aiRecommendations: ['Validate decision maker status', 'Schedule introductory AI voice discovery call'],
-      budgetSignal: 'MEDIUM',
-      timeline: 'Q4 Evaluation',
-      decisionMaker: true,
-      tags: ['CSV Import', 'Enterprise Batch'],
-      techStack: ['CRM Connector'],
-      competitors: [],
-      needClarity: 80,
-      urgency: 75,
-      budgetScore: 78,
-      authorityScore: 82,
-      fitScore: 85,
-      campaignId: null,
-      linkedin: `https://linkedin.com/search/results/all/?keywords=${encodeURIComponent(row.name + ' ' + row.company)}`,
-      website: `https://${row.company.toLowerCase().replace(/[^a-z]/g, '')}.com`,
-      companySize: '50-500 employees',
-      employees: 180,
-      funding: 'Series B',
-      hiringStatus: 'Actively Hiring',
-      nextAction: 'Queue for AI Qualification Call',
-    }))
+    if (mode === 'AI_CALLING_ONLY') {
+      // Create an instant AI Calling Only campaign
+      const targetLeadIds = newLeads.map(l => l.id as string).filter(Boolean)
+      const primaryLang = newLeads[0]?.primaryLanguage === 'gu'
+        ? 'Gujarati'
+        : newLeads[0]?.primaryLanguage === 'hi'
+        ? 'Hindi'
+        : 'English'
 
-    setIsImporting(false)
-    onImportSuccess?.(count, newLeads)
-    handleClose()
+      const createdCamp = addCampaign({
+        name: `AI Calling Only: ${fileName.replace(/\.[^/.]+$/, '') || 'Direct Leads'}`,
+        target: `${totalProcessed} Uploaded Leads (Bypassed AI Discovery)`,
+        type: 'AI_CALLING_ONLY',
+        sourceType: 'UPLOADED_FILE',
+        leadIds: targetLeadIds,
+        leads: targetLeadIds.length,
+        language: primaryLang,
+        voice: primaryLang === 'Gujarati' ? 'Gaurav (Native Gujarati Male)' : primaryLang === 'Hindi' ? 'Swara (Native Hindi Female)' : 'Aria (Professional English Female)',
+        tone: 'Consultative',
+        objective: 'Autonomous outbound AI qualification. Direct spreadsheet upload, web discovery skipped.',
+        greeting: primaryLang === 'Gujarati'
+          ? 'નમસ્તે, હું Callisto AI Solutions માંથી બોલું છું. શું આપની પાસે વાતચીત માટે 2 મિનિટનો સમય છે?'
+          : primaryLang === 'Hindi'
+          ? 'नमस्ते, मैं Callisto AI Solutions से बात कर रही हूँ। क्या आपके पास 2 मिनट का समय है?'
+          : "Hello, I'm calling from Callisto AI Solutions. Do you have 2 minutes to discuss sales automation?",
+      })
+
+      showToast('success', 'AI Calling Campaign Created!', `"${createdCamp.name}" launched with ${totalProcessed} direct leads.`)
+      handleClose()
+      navigate(`/ai-voice-agent?campaign=${createdCamp.id}&lead=${targetLeadIds[0] || ''}`)
+    } else {
+      showToast('success', 'Leads Imported Successfully', `${result.added} added, ${result.updated} updated, ${result.skipped} skipped.`)
+      handleClose()
+    }
   }
 
-  const importCount = selectedFile?.count || 120
+  // Count metrics for summary
+  const totalCount = validationSummary?.total || 0
+  const validCount = validationSummary?.valid || 0
+  const invalidCount = validationSummary?.invalid || 0
+  const dupCount = (validationSummary?.internalDuplicates || 0) + (validationSummary?.existingDuplicates || 0)
+
+  if (!isOpen) return null
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
       <div
-        className="modal-panel max-w-lg w-full border border-amber-500/30 shadow-2xl animate-fade-in"
+        className="modal-panel max-w-3xl w-full border border-amber-500/30 shadow-2xl animate-fade-in flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
-        {/* Modal Header */}
-        <div className="section-header flex items-center justify-between border-b border-bg-border px-4 py-3 bg-bg-secondary/70">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Upload className="w-3.5 h-3.5" />
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-bg-border px-5 py-3.5 bg-bg-secondary/70 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Upload className="w-4 h-4" />
             </div>
             <div>
-              <span className="section-title text-sm font-bold text-text-primary">Import Leads</span>
-              <span className="text-3xs text-text-muted ml-2">CSV / Excel Format</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-text-primary">Import Leads</span>
+                <span className="text-3xs font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                  CSV / Excel (.xlsx, .xls)
+                </span>
+              </div>
+              <span className="text-3xs text-text-muted">
+                Validation · Duplicate Detection · Person Mapping · AI Calling Only
+              </span>
             </div>
           </div>
+
           <button
             onClick={handleClose}
-            disabled={isImporting}
-            className="p-1 rounded hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors disabled:opacity-50"
+            disabled={isExecuting}
+            className="p-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors disabled:opacity-50"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-4 sm:p-5 space-y-4">
-          {/* Hidden File Input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={onFileInputChange}
-          />
-
-          {/* Upload Drop Area */}
-          {!selectedFile ? (
-            <div
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onDrop={onDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center cursor-pointer transition-all duration-200 ${
-                isDragging
-                  ? 'border-amber-400 bg-amber-500/15 scale-[1.01] shadow-lg shadow-amber-500/10'
-                  : 'border-amber-500/40 hover:border-amber-500/70 bg-amber-500/5 hover:bg-amber-500/10'
-              }`}
-            >
-              <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto mb-3 transition-transform hover:scale-110">
-                <Upload className="w-6 h-6" />
-              </div>
-              <div className="text-sm font-semibold text-text-primary">
-                Drop your CSV file here
-              </div>
-              <div className="text-2xs text-text-muted mt-1">
-                or <span className="text-amber-400 underline font-medium">browse files</span> from your computer
-              </div>
-              <div className="text-3xs text-text-muted mt-2">
-                Supported columns: Name, Company, Email, Phone, Industry, Location
-              </div>
-            </div>
-          ) : (
-            /* Selected File State Card */
-            <div className="p-3.5 bg-bg-card border border-amber-500/30 rounded-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                    <FileText className="w-4 h-4" />
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-semibold text-text-primary truncate font-mono">
-                      {selectedFile.name}
-                    </span>
-                    <span className="text-2xs text-text-muted">
-                      {selectedFile.size} · <strong className="text-amber-400 font-mono">{selectedFile.count} leads</strong> ready to import
-                    </span>
-                  </div>
-                </div>
-
-                {!isImporting && (
-                  <button
-                    onClick={resetState}
-                    className="p-1.5 text-text-muted hover:text-danger rounded hover:bg-bg-hover transition-colors"
-                    title="Remove selected file"
+        {/* Wizard Steps Breadcrumbs */}
+        <div className="flex items-center justify-between px-5 py-2.5 bg-bg-card/50 border-b border-bg-border text-2xs shrink-0 overflow-x-auto">
+          <div className="flex items-center gap-2">
+            {[
+              { id: 'upload', label: '1. Upload File' },
+              { id: 'mapping', label: '2. Contact Mapping' },
+              { id: 'validation', label: '3. Review & Duplicates' },
+            ].map((st, i) => {
+              const isActive = step === st.id
+              const isPast = (st.id === 'upload' && step !== 'upload') || (st.id === 'mapping' && step === 'validation')
+              return (
+                <div key={st.id} className="flex items-center gap-1.5">
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-3xs font-bold ${
+                      isActive
+                        ? 'bg-amber-500 text-black'
+                        : isPast
+                        ? 'bg-success text-black'
+                        : 'bg-bg-border text-text-muted'
+                    }`}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Mapped Fields Badges */}
-              {detectedColumns.length > 0 && (
-                <div className="pt-2 border-t border-bg-border/60">
-                  <div className="flex items-center justify-between text-2xs mb-1.5">
-                    <span className="text-text-muted font-medium">Auto-Mapped CRM Columns:</span>
-                    <span className="text-emerald-400 flex items-center gap-1 font-mono text-3xs font-semibold">
-                      <Check className="w-3 h-3" /> Validated
-                    </span>
+                    {isPast ? <Check className="w-3 h-3" /> : i + 1}
                   </div>
-                  <div className="flex flex-wrap gap-1">
-                    {detectedColumns.map(col => (
-                      <span
-                        key={col}
-                        className="px-1.5 py-0.5 rounded text-3xs font-mono bg-bg-secondary border border-bg-border text-text-secondary"
-                      >
-                        ✓ {col}
-                      </span>
-                    ))}
-                  </div>
+                  <span className={`font-medium ${isActive ? 'text-amber-400' : isPast ? 'text-text-primary' : 'text-text-muted'}`}>
+                    {st.label}
+                  </span>
+                  {i < 2 && <span className="text-text-muted mx-1">›</span>}
                 </div>
-              )}
+              )
+            })}
+          </div>
 
-              {/* Quick Preview Table of First 3 Records */}
-              {parsedRows.length > 0 && (
-                <div className="space-y-1 pt-1">
-                  <div className="text-3xs uppercase font-bold text-text-muted tracking-wider">
-                    Data Preview (First {Math.min(3, parsedRows.length)} of {parsedRows.length}):
-                  </div>
-                  <div className="rounded border border-bg-border overflow-hidden bg-bg-secondary/40 text-2xs">
-                    {parsedRows.slice(0, 3).map((r, i) => (
-                      <div
-                        key={i}
-                        className={`flex items-center justify-between px-2.5 py-1.5 ${
-                          i > 0 ? 'border-t border-bg-border/40' : ''
-                        }`}
-                      >
-                        <div className="truncate mr-2">
-                          <span className="font-semibold text-text-primary">{r.name}</span>
-                          <span className="text-text-muted text-3xs ml-1.5">({r.company})</span>
-                        </div>
-                        <span className="text-3xs text-text-muted font-mono shrink-0 truncate max-w-[140px]">
-                          {r.email}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Error Message if any */}
-          {errorMessage && (
-            <div className="flex items-center gap-2 p-2.5 rounded bg-danger/10 border border-danger/30 text-danger-bright text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {/* Quick Helper Actions / Demo Tools */}
-          {!selectedFile && (
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-2xs">
-              <button
-                type="button"
-                onClick={downloadSampleTemplate}
-                className="btn-ghost text-2xs gap-1 py-1 px-2 text-text-muted hover:text-amber-400"
-              >
-                <Download className="w-3 h-3" /> Download Sample CSV Template
-              </button>
-
-              <button
-                type="button"
-                onClick={loadSample120Leads}
-                className="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-2xs font-semibold flex items-center gap-1 transition-all"
-              >
-                <Sparkles className="w-3 h-3" /> Load Sample 120 Leads
-              </button>
-            </div>
-          )}
-
-          {/* Progress Animation Bar during active import */}
-          {isImporting && (
-            <div className="p-3 bg-bg-card border border-amber-500/40 rounded-xl space-y-2 animate-fade-in">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-amber-400 flex items-center gap-1.5">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {importStep}
-                </span>
-                <span className="font-mono font-bold text-text-primary text-xs">{importProgress}%</span>
-              </div>
-              <div className="w-full h-1.5 bg-bg-secondary rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-300 rounded-full"
-                  style={{ width: `${importProgress}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Footer Actions */}
-          <div className="flex items-center justify-between pt-2 border-t border-bg-border">
-            <span className="text-3xs text-text-muted">
-              {selectedFile ? `Ready to import ${importCount} records` : 'Select a file or load sample leads'}
+          {fileName && (
+            <span className="text-3xs text-text-muted font-mono truncate max-w-[200px]" title={fileName}>
+              {fileName} ({fileSizeStr})
             </span>
+          )}
+        </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={isImporting}
-                className="btn-secondary text-xs py-1.5 px-3"
-              >
-                Cancel
-              </button>
+        {/* Modal Scrollable Body */}
+        <div className="p-5 overflow-y-auto space-y-4 flex-1">
+          {/* STEP 1: UPLOAD */}
+          {step === 'upload' && (
+            <div className="space-y-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.tsv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                className="hidden"
+                onChange={onFileInputChange}
+              />
 
-              <button
-                type="button"
-                onClick={executeImport}
-                disabled={isImporting}
-                className="btn-primary text-xs py-1.5 px-4 font-semibold shadow-md shadow-amber-500/20 flex items-center gap-1.5"
+              {/* Drag & Drop Area */}
+              <div
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
+                  isDragging
+                    ? 'border-amber-400 bg-amber-500/15 scale-[1.01] shadow-lg shadow-amber-500/10'
+                    : 'border-amber-500/40 hover:border-amber-500/70 bg-amber-500/5 hover:bg-amber-500/10'
+                }`}
               >
-                {isImporting ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Importing...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-3.5 h-3.5" />
-                    Import {importCount} Leads
-                  </>
-                )}
-              </button>
+                <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto mb-3 transition-transform hover:scale-110">
+                  <Upload className="w-7 h-7" />
+                </div>
+                <div className="text-sm font-semibold text-text-primary">
+                  Drop your CSV or Excel spreadsheet here
+                </div>
+                <div className="text-2xs text-text-muted mt-1.5">
+                  or <span className="text-amber-400 underline font-medium">browse files</span> from your computer
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-3 text-3xs text-text-muted font-mono">
+                  <span className="px-2 py-0.5 rounded bg-bg-secondary border border-bg-border">.xlsx (Excel)</span>
+                  <span className="px-2 py-0.5 rounded bg-bg-secondary border border-bg-border">.xls (Legacy Excel)</span>
+                  <span className="px-2 py-0.5 rounded bg-bg-secondary border border-bg-border">.csv (Comma/Semicolon)</span>
+                  <span className="px-2 py-0.5 rounded bg-bg-secondary border border-bg-border">.tsv (Tab-delimited)</span>
+                </div>
+              </div>
+
+              {/* Parsing Indicator */}
+              {isParsing && (
+                <div className="p-3 bg-bg-card border border-amber-500/40 rounded-xl flex items-center justify-center gap-2 text-xs text-amber-400">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Reading spreadsheet structure and discovering columns...</span>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {parseError && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger-bright text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{parseError}</span>
+                </div>
+              )}
+
+              {/* Sample Templates & Fast Loading */}
+              <div className="pt-2 border-t border-bg-border space-y-2">
+                <div className="text-2xs uppercase font-bold text-text-muted tracking-wider">
+                  Quick Testing & Templates:
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={loadTemplateData}
+                    className="p-2.5 rounded-lg bg-bg-card border border-bg-border hover:border-amber-500/40 text-left flex items-start gap-2.5 transition-all group"
+                  >
+                    <div className="w-7 h-7 rounded bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105">
+                      <FileText className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-text-primary group-hover:text-amber-400">
+                        Load Official Template Excel
+                      </div>
+                      <div className="text-3xs text-text-muted">
+                        callisto_leads_import_template.xlsx (11 Verified Leads)
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={loadSample120Leads}
+                    className="p-2.5 rounded-lg bg-bg-card border border-bg-border hover:border-amber-500/40 text-left flex items-start gap-2.5 transition-all group"
+                  >
+                    <div className="w-7 h-7 rounded bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-text-primary group-hover:text-amber-400">
+                        Load Enterprise Sample (120 Leads)
+                      </div>
+                      <div className="text-3xs text-text-muted">
+                        Simulates multi-region enterprise batch with phone numbers
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-2xs">
+                  <span className="text-3xs text-text-muted">
+                    Need the blank template?
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => downloadCallistoTemplate('xlsx')}
+                      className="btn-ghost text-2xs gap-1 py-1 px-2 text-text-muted hover:text-amber-400"
+                    >
+                      <Download className="w-3 h-3" /> Download .xlsx Template
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadCallistoTemplate('csv')}
+                      className="btn-ghost text-2xs gap-1 py-1 px-2 text-text-muted hover:text-amber-400"
+                    >
+                      <Download className="w-3 h-3" /> Download .csv Template
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
+          )}
+
+          {/* STEP 2: FIELD / CONTACT MAPPING */}
+          {step === 'mapping' && spreadsheetData && (
+            <div className="space-y-4">
+              <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-center justify-between text-2xs">
+                <div>
+                  <span className="font-semibold text-text-primary">Detected Columns: </span>
+                  <span className="text-text-muted">{spreadsheetData.headers.join(', ')}</span>
+                </div>
+                <span className="font-mono text-amber-400 font-semibold shrink-0 ml-2">
+                  {spreadsheetData.totalRows} Rows Found
+                </span>
+              </div>
+
+              <div className="text-2xs text-text-muted">
+                Map the columns from your uploaded file to the contact attributes in Callisto AI. We have auto-detected matching fields for you:
+              </div>
+
+              {/* Mapping Form Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {/* Full Name */}
+                <div className="p-2.5 bg-bg-card border border-bg-border rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-text-primary flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Full Name *</span>
+                    </label>
+                    {mapping.name && <span className="text-3xs text-success font-semibold">✓ Mapped</span>}
+                  </div>
+                  <select
+                    className="input text-xs w-full"
+                    value={mapping.name || ''}
+                    onChange={e => setMapping(p => ({ ...p, name: e.target.value || undefined }))}
+                  >
+                    <option value="">-- (Not Mapped / Combine First + Last) --</option>
+                    {spreadsheetData.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Company Name */}
+                <div className="p-2.5 bg-bg-card border border-bg-border rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-text-primary flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Company / Organization *</span>
+                    </label>
+                    {mapping.company && <span className="text-3xs text-success font-semibold">✓ Mapped</span>}
+                  </div>
+                  <select
+                    className="input text-xs w-full"
+                    value={mapping.company || ''}
+                    onChange={e => setMapping(p => ({ ...p, company: e.target.value || undefined }))}
+                  >
+                    <option value="">-- (Not Mapped) --</option>
+                    {spreadsheetData.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Email Address */}
+                <div className="p-2.5 bg-bg-card border border-bg-border rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-text-primary flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Corporate Email</span>
+                    </label>
+                    {mapping.email && <span className="text-3xs text-success font-semibold">✓ Mapped</span>}
+                  </div>
+                  <select
+                    className="input text-xs w-full"
+                    value={mapping.email || ''}
+                    onChange={e => setMapping(p => ({ ...p, email: e.target.value || undefined }))}
+                  >
+                    <option value="">-- (Not Mapped) --</option>
+                    {spreadsheetData.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Phone Number */}
+                <div className="p-2.5 bg-bg-card border border-bg-border rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-text-primary flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Phone Number (for AI Calling)</span>
+                    </label>
+                    {mapping.phone && <span className="text-3xs text-success font-semibold">✓ Mapped</span>}
+                  </div>
+                  <select
+                    className="input text-xs w-full"
+                    value={mapping.phone || ''}
+                    onChange={e => setMapping(p => ({ ...p, phone: e.target.value || undefined }))}
+                  >
+                    <option value="">-- (Not Mapped) --</option>
+                    {spreadsheetData.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Job Title / Role */}
+                <div className="p-2.5 bg-bg-card border border-bg-border rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-text-primary flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Job Title / Role</span>
+                    </label>
+                    {mapping.jobTitle && <span className="text-3xs text-success font-semibold">✓ Mapped</span>}
+                  </div>
+                  <select
+                    className="input text-xs w-full"
+                    value={mapping.jobTitle || ''}
+                    onChange={e => setMapping(p => ({ ...p, jobTitle: e.target.value || undefined }))}
+                  >
+                    <option value="">-- (Not Mapped) --</option>
+                    {spreadsheetData.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Industry */}
+                <div className="p-2.5 bg-bg-card border border-bg-border rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-text-primary flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Industry / Sector</span>
+                    </label>
+                    {mapping.industry && <span className="text-3xs text-success font-semibold">✓ Mapped</span>}
+                  </div>
+                  <select
+                    className="input text-xs w-full"
+                    value={mapping.industry || ''}
+                    onChange={e => setMapping(p => ({ ...p, industry: e.target.value || undefined }))}
+                  >
+                    <option value="">-- (Not Mapped) --</option>
+                    {spreadsheetData.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Location */}
+                <div className="p-2.5 bg-bg-card border border-bg-border rounded-lg space-y-1 sm:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-text-primary flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Location / City / Country (Used for Vernacular Language Detection)</span>
+                    </label>
+                    {mapping.location && <span className="text-3xs text-success font-semibold">✓ Mapped</span>}
+                  </div>
+                  <select
+                    className="input text-xs w-full"
+                    value={mapping.location || ''}
+                    onChange={e => setMapping(p => ({ ...p, location: e.target.value || undefined }))}
+                  >
+                    <option value="">-- (Not Mapped) --</option>
+                    {spreadsheetData.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Data Preview */}
+              <div className="space-y-1.5 pt-2 border-t border-bg-border">
+                <div className="text-3xs uppercase font-bold text-text-muted tracking-wider flex items-center justify-between">
+                  <span>Live Preview of Mapped Data (First 3 Rows):</span>
+                </div>
+                <div className="rounded-lg border border-bg-border overflow-hidden bg-bg-secondary/40 text-2xs">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-bg-card border-b border-bg-border text-text-muted text-left text-3xs font-semibold">
+                        <th className="p-2">Name</th>
+                        <th className="p-2">Company</th>
+                        <th className="p-2">Email</th>
+                        <th className="p-2">Phone</th>
+                        <th className="p-2">Location</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-bg-border">
+                      {spreadsheetData.rows.slice(0, 3).map((row, idx) => {
+                        const name = mapping.name ? row[mapping.name] : 'N/A'
+                        const comp = mapping.company ? row[mapping.company] : 'N/A'
+                        const email = mapping.email ? row[mapping.email] : 'N/A'
+                        const phone = mapping.phone ? row[mapping.phone] : 'N/A'
+                        const loc = mapping.location ? row[mapping.location] : 'Global'
+                        return (
+                          <tr key={idx} className="hover:bg-bg-hover/50">
+                            <td className="p-2 font-medium text-text-primary">{name || '—'}</td>
+                            <td className="p-2 text-text-secondary">{comp || '—'}</td>
+                            <td className="p-2 font-mono text-3xs text-text-muted">{email || '—'}</td>
+                            <td className="p-2 font-mono text-3xs text-text-muted">{phone || '—'}</td>
+                            <td className="p-2 text-text-secondary">{loc || '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: VALIDATION & DUPLICATE RESOLUTION */}
+          {step === 'validation' && validationSummary && (
+            <div className="space-y-4">
+              {/* Stat Counters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="p-3 bg-bg-card border border-bg-border rounded-xl">
+                  <div className="text-2xs text-text-muted">Total Rows</div>
+                  <div className="text-lg font-bold font-mono text-text-primary">{totalCount}</div>
+                </div>
+
+                <div className="p-3 bg-bg-card border border-success/30 rounded-xl">
+                  <div className="text-2xs text-success">Valid Contacts</div>
+                  <div className="text-lg font-bold font-mono text-success">{validCount}</div>
+                </div>
+
+                <div className="p-3 bg-bg-card border border-amber-500/30 rounded-xl">
+                  <div className="text-2xs text-amber-400">Duplicates Found</div>
+                  <div className="text-lg font-bold font-mono text-amber-400">{dupCount}</div>
+                </div>
+
+                <div className="p-3 bg-bg-card border border-danger/30 rounded-xl">
+                  <div className="text-2xs text-danger-bright">Invalid Rows</div>
+                  <div className="text-lg font-bold font-mono text-danger-bright">{invalidCount}</div>
+                </div>
+              </div>
+
+              {/* Duplicate Resolution Strategy Picker */}
+              <div className="p-3.5 bg-bg-card border border-amber-500/30 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-amber-400" />
+                    <span>Duplicate Contact Handling Strategy:</span>
+                  </div>
+                  <span className="text-3xs text-text-muted">
+                    {dupCount} duplicates detected
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <label
+                    className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                      duplicateStrategy === 'skip'
+                        ? 'border-amber-400 bg-amber-500/10'
+                        : 'border-bg-border bg-bg-secondary hover:border-bg-border/80'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="dupStrategy"
+                      checked={duplicateStrategy === 'skip'}
+                      onChange={() => setDuplicateStrategy('skip')}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="font-semibold text-text-primary">Skip Duplicates (Default)</div>
+                      <div className="text-3xs text-text-muted">Keep existing CRM leads; drop duplicate spreadsheet rows</div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                      duplicateStrategy === 'update'
+                        ? 'border-amber-400 bg-amber-500/10'
+                        : 'border-bg-border bg-bg-secondary hover:border-bg-border/80'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="dupStrategy"
+                      checked={duplicateStrategy === 'update'}
+                      onChange={() => setDuplicateStrategy('update')}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="font-semibold text-text-primary">Update Existing Leads</div>
+                      <div className="text-3xs text-text-muted">Merge phone/title/location into existing lead records</div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                      duplicateStrategy === 'keep_both'
+                        ? 'border-amber-400 bg-amber-500/10'
+                        : 'border-bg-border bg-bg-secondary hover:border-bg-border/80'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="dupStrategy"
+                      checked={duplicateStrategy === 'keep_both'}
+                      onChange={() => setDuplicateStrategy('keep_both')}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="font-semibold text-text-primary">Import as Separate</div>
+                      <div className="text-3xs text-text-muted">Create new lead IDs without altering previous records</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Review Filter Tabs */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between border-b border-bg-border pb-1">
+                  <div className="flex items-center gap-1.5 text-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setActiveReviewTab('all')}
+                      className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                        activeReviewTab === 'all'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                          : 'text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      All Records ({totalCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveReviewTab('valid')}
+                      className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                        activeReviewTab === 'valid'
+                          ? 'bg-success/20 text-success border border-success/40'
+                          : 'text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      Valid ({validCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveReviewTab('duplicates')}
+                      className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                        activeReviewTab === 'duplicates'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                          : 'text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      Duplicates ({dupCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveReviewTab('errors')}
+                      className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                        activeReviewTab === 'errors'
+                          ? 'bg-danger/20 text-danger-bright border border-danger/40'
+                          : 'text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      Invalid / Errors ({invalidCount})
+                    </button>
+                  </div>
+
+                  <label className="flex items-center gap-1.5 text-3xs text-text-muted cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={skipInvalidRows}
+                      onChange={e => setSkipInvalidRows(e.target.checked)}
+                      className="rounded border-bg-border text-amber-500"
+                    />
+                    <span>Skip invalid rows on import</span>
+                  </label>
+                </div>
+
+                {/* Rows Table */}
+                <div className="rounded-lg border border-bg-border overflow-hidden bg-bg-secondary/40 text-2xs max-h-48 overflow-y-auto">
+                  <table className="w-full border-collapse">
+                    <thead className="sticky top-0 bg-bg-card border-b border-bg-border text-text-muted text-left text-3xs font-semibold">
+                      <tr>
+                        <th className="p-2 w-10">Row</th>
+                        <th className="p-2">Lead</th>
+                        <th className="p-2">Phone</th>
+                        <th className="p-2">Email</th>
+                        <th className="p-2">Status / Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-bg-border">
+                      {displayedRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-4 text-center text-text-muted text-2xs">
+                            No records in this tab.
+                          </td>
+                        </tr>
+                      ) : (
+                        displayedRows.map((r, i) => (
+                          <tr key={i} className="hover:bg-bg-hover/50">
+                            <td className="p-2 font-mono text-3xs text-text-muted">#{r.rowIndex}</td>
+                            <td className="p-2">
+                              <div className="font-semibold text-text-primary">{r.mappedData.name}</div>
+                              <div className="text-3xs text-text-muted">{r.mappedData.company} · {r.mappedData.jobTitle}</div>
+                            </td>
+                            <td className="p-2 font-mono text-3xs text-text-secondary">
+                              {r.mappedData.phone || <span className="text-danger-bright">Missing</span>}
+                            </td>
+                            <td className="p-2 font-mono text-3xs text-text-secondary truncate max-w-[130px]">
+                              {r.mappedData.email || '—'}
+                            </td>
+                            <td className="p-2">
+                              {r.status === 'VALID' && (
+                                <span className="inline-flex items-center gap-1 text-3xs font-semibold text-success">
+                                  <CheckCircle2 className="w-3 h-3" /> Valid
+                                </span>
+                              )}
+                              {r.status === 'INVALID' && (
+                                <span className="inline-flex items-center gap-1 text-3xs font-semibold text-danger-bright" title={r.errors.join(', ')}>
+                                  <AlertCircle className="w-3 h-3" /> {r.errors[0]}
+                                </span>
+                              )}
+                              {r.status === 'WARNING' && (
+                                <span className="inline-flex items-center gap-1 text-3xs font-semibold text-amber-400" title={r.duplicateReason || r.warnings.join(', ')}>
+                                  <AlertTriangle className="w-3 h-3" /> {r.duplicateReason || r.warnings[0]}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Progress animation during active import */}
+              {isExecuting && (
+                <div className="p-3 bg-bg-card border border-amber-500/40 rounded-xl space-y-2 animate-fade-in">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-amber-400 flex items-center gap-1.5">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {importStepText}
+                    </span>
+                    <span className="font-mono font-bold text-text-primary text-xs">{importProgress}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-300 rounded-full"
+                      style={{ width: `${importProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer Controls */}
+        <div className="flex items-center justify-between p-4 border-t border-bg-border bg-bg-card/30 shrink-0">
+          <div>
+            {step === 'mapping' && (
+              <button
+                type="button"
+                onClick={() => setStep('upload')}
+                disabled={isExecuting}
+                className="btn-secondary text-xs gap-1 py-1.5 px-3"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
+              </button>
+            )}
+            {step === 'validation' && (
+              <button
+                type="button"
+                onClick={() => setStep('mapping')}
+                disabled={isExecuting}
+                className="btn-secondary text-xs gap-1 py-1.5 px-3"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Adjust Mapping
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={isExecuting}
+              className="btn-secondary text-xs py-1.5 px-3"
+            >
+              Cancel
+            </button>
+
+            {step === 'mapping' && (
+              <button
+                type="button"
+                onClick={proceedToValidation}
+                className="btn-primary text-xs py-1.5 px-4 font-semibold flex items-center gap-1.5"
+              >
+                <span>Validate & Check Duplicates</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {step === 'validation' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleImport('PIPELINE')}
+                  disabled={isExecuting}
+                  className="btn-secondary text-xs py-1.5 px-3.5 font-medium flex items-center gap-1.5 hover:border-amber-500/50"
+                  title="Add to Leads without launching campaign immediately"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Import to Leads Pipeline</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleImport('AI_CALLING_ONLY')}
+                  disabled={isExecuting}
+                  className="btn-primary text-xs py-1.5 px-4 font-semibold shadow-lg shadow-amber-500/20 flex items-center gap-1.5"
+                  title="Directly call these uploaded leads, bypassing AI lead discovery completely"
+                >
+                  <PhoneCall className="w-3.5 h-3.5" />
+                  <span>🚀 AI Calling Only Campaign</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

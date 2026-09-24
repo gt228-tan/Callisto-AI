@@ -1,6 +1,26 @@
+import { type SupportedLanguage, detectLanguageFromLocation } from '@/lib/languages'
+
 export type IntentLevel = 'HIGH' | 'MEDIUM' | 'LOW'
 export type LeadStatus  = 'NEW' | 'ENRICHED' | 'QUALIFIED' | 'CONTACTED' | 'INTERESTED' | 'MEETING' | 'OPPORTUNITY' | 'WON' | 'LOST' | 'NOT_QUALIFIED'
-export type LeadSource  = 'LinkedIn' | 'X' | 'Company Website' | 'Public Directory' | 'Freelance Platform' | 'CRM' | 'Referral'
+export type LeadSource =
+  | 'LinkedIn'
+  | 'X'
+  | 'Company Website'
+  | 'Public Directory'
+  | 'Freelance Platform'
+  | 'CRM'
+  | 'Referral'
+  | 'CSV / Excel Import'
+  | 'Custom Upload'
+  | 'Apollo.io'
+  | 'ZoomInfo'
+  | 'Google Maps'
+  | 'Hunter.io'
+  | 'Clay.com'
+  | 'Inbound Webhook'
+  | 'Meta Lead Ads'
+  | 'Google Ads'
+  | string
 
 export interface Lead {
   id: string
@@ -10,6 +30,8 @@ export interface Lead {
   industry: string
   location: string
   country: string
+  primaryLanguage?: SupportedLanguage
+  secondaryLanguages?: SupportedLanguage[]
   requirement: string
   intentScore: number
   intent: IntentLevel
@@ -48,6 +70,11 @@ const now = new Date()
 const daysAgo = (d: number) => new Date(now.getTime() - d * 86_400_000)
 const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000)
 
+export function getLeadLanguage(lead: Lead): SupportedLanguage {
+  if (lead.primaryLanguage) return lead.primaryLanguage
+  return detectLanguageFromLocation(lead.location, lead.name).primary
+}
+
 export const leads: Lead[] = [
   {
     id: 'L001',
@@ -57,6 +84,8 @@ export const leads: Lead[] = [
     industry: 'IT Services',
     location: 'Bangalore, India',
     country: 'India',
+    primaryLanguage: 'hi',
+    secondaryLanguages: ['en', 'gu'],
     requirement: 'Looking for an experienced team to implement an AI-powered customer support solution. We need NLP-based ticketing, chatbot integration with our existing CRM (Salesforce), and voice support. Active project — budget allocated, looking to kick off Q4.',
     intentScore: 94,
     intent: 'HIGH',
@@ -242,6 +271,8 @@ export const leads: Lead[] = [
     industry: 'HealthTech',
     location: 'Ahmedabad, India',
     country: 'India',
+    primaryLanguage: 'gu',
+    secondaryLanguages: ['hi', 'en'],
     requirement: 'Building AI-powered patient engagement platform. Need voice AI for appointment scheduling and follow-up calls in Gujarati and Hindi. HIPAA-equivalent compliance required.',
     intentScore: 88,
     intent: 'HIGH',

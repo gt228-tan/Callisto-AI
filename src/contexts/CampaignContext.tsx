@@ -59,7 +59,7 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
       language: data.language || 'English',
       voice: data.voice || 'Professional Female',
       tone: data.tone || 'Consultative',
-      leads: data.leads ?? Math.floor(Math.random() * 100) + 20,
+      leads: data.leadIds && data.leadIds.length > 0 ? data.leadIds.length : (data.leads ?? Math.floor(Math.random() * 100) + 20),
       calls: data.calls ?? 0,
       answered: data.answered ?? 0,
       qualified: data.qualified ?? 0,
@@ -72,6 +72,9 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
       greeting: data.greeting || '',
       maxRetries: data.maxRetries ?? 3,
       retryInterval: data.retryInterval || '24 hours',
+      type: data.type || 'AI_DISCOVERY_CALLING',
+      leadIds: data.leadIds || [],
+      sourceType: data.sourceType || 'AI_DISCOVERED',
     }
 
     setCampaignList(prev => [newCamp, ...prev])

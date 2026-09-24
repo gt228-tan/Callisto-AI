@@ -621,9 +621,9 @@ export function SettingsPage() {
                 <div className="text-xs font-semibold text-text-primary">AI Voice Persona Parameters</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
                   {[
-                    { l: 'Default Agent Persona Name', type: 'input', val: 'Aria (Enterprise SDR)' },
-                    { l: 'Default Outbound Language', type: 'select', opts: ['English (US)', 'English (India)', 'Hindi (हिंदी)', 'Gujarati (ગુજરાતી)', 'Spanish (ES)', 'German (DE)'] },
-                    { l: 'Voice Style & Timbre', type: 'select', opts: ['Professional Female (Natural Neural)', 'Warm Professional Male', 'Expressive Native Hindi Female', 'British Corporate Male'] },
+                    { l: 'Default Agent Persona Name', type: 'input', val: 'Gaurav (Regional SDR)' },
+                    { l: 'Default Outbound Language', type: 'select', opts: ['English (Global / US)', 'Hindi (हिंदी)', 'Gujarati (ગુજરાતી)'] },
+                    { l: 'Voice Style & Timbre', type: 'select', opts: ['Gaurav (Native Gujarati Neural)', 'Swara (Native Hindi Neural)', 'Aria (Professional English Neural)', 'Alex (Professional English Male)'] },
                     { l: 'Conversational Pacing & Speed', type: 'select', opts: ['0.85x (Calm & Slower)', '1.0x (Natural Conversational)', '1.1x (Energetic)'] },
                     { l: 'Max Call Duration (Minutes)', type: 'input', val: '10' },
                     { l: 'Unanswered Ring Timeout (Sec)', type: 'input', val: '28' },

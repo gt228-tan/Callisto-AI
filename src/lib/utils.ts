@@ -33,8 +33,9 @@ export function getInitials(name: string): string {
   return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
 }
 
-export function timeAgo(date: Date): string {
-  const diff = Date.now() - date.getTime()
+export function timeAgo(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date)
+  const diff = Date.now() - d.getTime()
   const mins  = Math.floor(diff / 60_000)
   const hours = Math.floor(diff / 3_600_000)
   const days  = Math.floor(diff / 86_400_000)
@@ -44,16 +45,19 @@ export function timeAgo(date: Date): string {
   return `${days}d ago`
 }
 
-export function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+export function formatDate(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export function formatDateTime(date: Date): string {
-  return date.toLocaleString('en-US', {
+export function formatDateTime(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date)
+  return d.toLocaleString('en-US', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
   })
 }
 
-export function formatTimestamp(date: Date): string {
-  return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+export function formatTimestamp(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date)
+  return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }

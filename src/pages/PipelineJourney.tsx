@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import {
   Workflow, Globe, Radar, Zap, CheckCircle, PhoneCall, MessageSquare,
   Sparkles, Star, Calendar, ExternalLink, ArrowRight, Play, Pause,
-  RotateCcw, Volume2, ShieldCheck, Mail, Building2, User, Phone, Check, Link
+  RotateCcw, Volume2, ShieldCheck, Mail, Building2, User, Phone, Check, Link,
+  Languages, MapPin
 } from 'lucide-react'
 import { useAppContext } from '@/contexts/AppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { SupportedLanguage } from '@/lib/languages'
 
 interface PipelineStep {
   number: number
@@ -18,12 +20,48 @@ interface PipelineStep {
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
 }
 
+interface DialogueTurn {
+  speaker: 'AI' | 'PROSPECT'
+  text: string
+  subtitle?: string
+}
+
+const DIALOGUES: Record<SupportedLanguage, DialogueTurn[]> = {
+  gu: [
+    { speaker: 'AI', text: 'નમસ્તે રાહુલભાઈ, હું Callisto AI Solutions માંથી ગૌરવ બોલું છું. શું આપ Acme Digital ના ટેકનોલોજી VP સાથે વાત કરી રહ્યો છું?', subtitle: 'Hello Rahul, this is Gaurav calling from Callisto AI Solutions. Am I speaking with the VP of Technology at Acme Digital?' },
+    { speaker: 'PROSPECT', text: 'હા, રાહુલ બોલું છું. આ કૉલ શેના સંદર્ભમાં છે?', subtitle: 'Yes, Rahul here. What is this call regarding?' },
+    { speaker: 'AI', text: 'મેં આપની પબ્લિક રિક્વાયરમેન્ટ જોઈ હતી કે આપ સેલ્સ પાઇપલાઇન માટે કન્વર્ઝેશનલ AI વૉઇસ કૉલિંગ લાગુ કરવા માંગો છો. અમે 30%+ કન્વર્ઝન આપીએ છીએ. શું આપની પાસે 2 મિનિટ છે?', subtitle: 'I noticed your requirement regarding deploying conversational AI voice calling for your SDR pipeline. We help teams achieve 30%+ conversion. Do you have 2 minutes?' },
+    { speaker: 'PROSPECT', text: 'ચોક્કસ! શું તમારું વૉઇસ એજન્ટ ગુજરાતી અને સેલ્સફોર્સ CRM સિન્ક સપોર્ટ કરે છે?', subtitle: 'Sure! Does your voice agent support Gujarati and direct Salesforce CRM sync?' },
+    { speaker: 'AI', text: 'હા ચોક્કસ! અમારું સિસ્ટમ ગુજરાતી, હિન્દી અને અંગ્રેજીમાં 400ms સ્પીડ સાથે વાત કરે છે અને 5 સેકન્ડમાં સેલ્સફોર્સ સાથે ડેટા સિન્ક કરે છે.', subtitle: 'Absolutely! Our system operates in Gujarati, Hindi, and English with under 400ms latency and 5-second CRM sync.' },
+    { speaker: 'PROSPECT', text: 'ખૂબ સરસ! શું આપણે મંગળવારે સવારે 11 વાગ્યે 20 મિનિટનું ટેકનિકલ ડેમો રાખી શકીએ?', subtitle: 'Very good! Can we schedule a 20-minute technical demonstration this Tuesday at 11 AM IST?' },
+    { speaker: 'AI', text: 'બિલકુલ! મેં મંગળવારે સવારે 11:00 વાગ્યા માટે એક્ઝિક્યુટિવ ડેમો બુક કરી લીધો છે અને કેલેન્ડર ઇનવાઇટ rahul.mehta@acmedigital.com પર મોકલી દીધું છે.', subtitle: 'Perfect! I have reserved Tuesday at 11:00 AM IST for your demo and invite sent to rahul.mehta@acmedigital.com.' },
+  ],
+  hi: [
+    { speaker: 'AI', text: 'नमस्ते राहुल जी, मैं Callisto AI Solutions से स्वरा बोल रही हूँ। क्या मैं Acme Digital के VP ऑफ टेक्नोलॉजी से बात कर रही हूँ?', subtitle: 'Hello Rahul, this is Swara calling from Callisto AI Solutions. Am I speaking with the VP of Technology at Acme Digital?' },
+    { speaker: 'PROSPECT', text: 'हाँ, मैं राहुल बोल रहा हूँ। यह किस विषय में है?', subtitle: 'Yes, Rahul here. What is this regarding?' },
+    { speaker: 'AI', text: 'मैंने आपकी सार्वजनिक पोस्ट देखी थी जिसमें आपको अपनी SDR टीम के लिए AI वॉइस कॉलिंग की आवश्यकता थी। हम टीमों का क्वालिफिकेशन कन्वर्जन 30%+ बढ़ाते हैं। क्या आपके पास 2 मिनट हैं?', subtitle: 'I noticed your public post regarding deploying AI conversational voice calling. We help teams achieve 30%+ conversion. Do you have 2 minutes?' },
+    { speaker: 'PROSPECT', text: 'हाँ! क्या आपका वॉइस एजेंट हिंदी और अंग्रेज़ी में लाइव FAQ और Salesforce CRM सिंक संभाल सकता है?', subtitle: 'Sure! Does your voice agent handle live FAQs in Hindi and English with Salesforce CRM sync?' },
+    { speaker: 'AI', text: 'बिल्कुल! हमारा AI एजेंट आपके ज्ञानकोष के आधार पर तुरंत उत्तर देता है और 5 सेकंड के अंदर कॉल ट्रांसक्रिप्ट Salesforce में दर्ज कर देता है।', subtitle: 'Absolutely! Our voice agent grounds on your docs to answer FAQs and syncs transcripts into Salesforce within 5 seconds.' },
+    { speaker: 'PROSPECT', text: 'बहुत बढ़िया! क्या हम इस मंगलवार सुबह 11 बजे एक 20 मिनट का डेमो तय कर सकते हैं?', subtitle: 'That sounds impressive. Can we schedule a 20-minute technical demonstration this Tuesday at 11 AM IST?' },
+    { speaker: 'AI', text: 'उत्कृष्ट! मैंने मंगलवार सुबह 11:00 बजे का स्लॉट आरक्षित कर दिया है और आमंत्रण rahul.mehta@acmedigital.com पर भेज दिया है।', subtitle: 'Perfect! I have reserved Tuesday at 11:00 AM IST for your demo. A calendar invite has been sent to rahul.mehta@acmedigital.com.' },
+  ],
+  en: [
+    { speaker: 'AI', text: 'Hello Rahul, this is Aria calling from Callisto AI Solutions. Am I speaking with the VP of Technology at Acme Digital?' },
+    { speaker: 'PROSPECT', text: 'Yes, Rahul here. What is this regarding?' },
+    { speaker: 'AI', text: 'I noticed your public requirement regarding deploying AI conversational voice calling for your sales pipeline. We help teams like Acme Digital automate outbound qualification with 30%+ conversion. Do you have 2 minutes?' },
+    { speaker: 'PROSPECT', text: 'Sure! We are actively looking at options. Does your voice agent support live FAQ handling and direct Salesforce sync?' },
+    { speaker: 'AI', text: 'Absolutely! Our voice agent grounds directly on your product docs to answer technical FAQs in real-time, and bi-directionally syncs all call transcripts and meeting notes into Salesforce within 5 seconds.' },
+    { speaker: 'PROSPECT', text: 'That sounds impressive. Can we schedule a 20-minute technical demonstration this Tuesday at 11 AM IST?' },
+    { speaker: 'AI', text: 'Perfect! I have reserved Tuesday at 11:00 AM IST for your executive demo. A calendar invite and summary have been dispatched to rahul.mehta@acmedigital.com.' },
+  ]
+}
+
 const pipelineSteps: PipelineStep[] = [
   { number: 1, id: 'understand', title: 'Understand Business & Products', shortTitle: '1. Understand', desc: 'Scan company URL, offerings, documents & ICP personas', icon: Globe, status: 'COMPLETED' },
   { number: 2, id: 'discover',   title: 'Discover Public Requirements & Leads', shortTitle: '2. Discover', desc: 'Crawl LinkedIn & public directories with source transparency', icon: Radar, status: 'COMPLETED' },
   { number: 3, id: 'enrich',     title: 'Automated Lead Enrichment', shortTitle: '3. Enrich', desc: 'Verify email, phone, company size, tech stack & funding', icon: Zap, status: 'COMPLETED' },
   { number: 4, id: 'qualify',    title: 'AI BANT Qualification', shortTitle: '4. Qualify', desc: 'Evaluate Budget, Authority, Need, and Timeline fit', icon: CheckCircle, status: 'COMPLETED' },
-  { number: 5, id: 'call',       title: 'Multilingual AI Voice Call', shortTitle: '5. AI Call', desc: 'Autonomous outbound voice agent with speech synthesis', icon: PhoneCall, status: 'IN_PROGRESS' },
+  { number: 5, id: 'call',       title: 'Multilingual AI Voice Call (EN, HI, GU)', shortTitle: '5. AI Call', desc: 'Autonomous outbound voice agent with speech synthesis in English, Hindi & Gujarati', icon: PhoneCall, status: 'IN_PROGRESS' },
   { number: 6, id: 'response',   title: 'Capture Live Response & FAQs', shortTitle: '6. Capture Response', desc: 'Handle prospect replies, objection FAQs & voicemail drop', icon: MessageSquare, status: 'IN_PROGRESS' },
   { number: 7, id: 'transcript', title: 'Live Transcript & Insights', shortTitle: '7. Transcript', desc: 'Sentiment classification, buying signals & next-best action', icon: Sparkles, status: 'PENDING' },
   { number: 8, id: 'identify',   title: 'Identify Interested Prospects', shortTitle: '8. Highlight Lead', desc: 'Tag high-intent prospects who expressed buying interest', icon: Star, status: 'PENDING' },
@@ -33,11 +71,12 @@ const pipelineSteps: PipelineStep[] = [
 export function PipelineJourney() {
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { language, t } = useAppContext()
+  const { language, t, businessProfile } = useAppContext()
 
   const [activeStep, setActiveStep] = useState(5)
   const [isPlayingAuto, setIsPlayingAuto] = useState(false)
   const [speechActive, setSpeechActive] = useState(false)
+  const [callLanguage, setCallLanguage] = useState<SupportedLanguage>('gu')
   const autoPlayTimerRef = useRef<number | null>(null)
 
   // Demo prospect details
@@ -46,7 +85,7 @@ export function PipelineJourney() {
     jobTitle: 'VP of Technology & Inside Sales',
     company: 'Acme Digital Solutions',
     country: 'India',
-    location: 'Bangalore, India',
+    location: 'Bangalore & Ahmedabad, India',
     email: 'rahul.mehta@acmedigital.com',
     phone: '+91 98201 44892',
     source: 'LinkedIn Public Post',
@@ -65,27 +104,18 @@ export function PipelineJourney() {
       'Requested technical calendar demonstration for sales team',
     ],
     objections: ['Asked about CRM sync latency with Salesforce'],
-    dialogue: [
-      { speaker: 'AI', text: 'Hello Rahul, this is Aria calling from Callisto AI Solutions. Am I speaking with the VP of Technology at Acme Digital?' },
-      { speaker: 'PROSPECT', text: 'Yes, Rahul here. What is this regarding?' },
-      { speaker: 'AI', text: 'I noticed your public requirement regarding deploying AI conversational voice calling for your sales pipeline. We help teams like Acme Digital automate outbound qualification with 30%+ conversion. Do you have 2 minutes?' },
-      { speaker: 'PROSPECT', text: 'Sure! We are actively looking at options. Does your voice agent support live FAQ handling and direct Salesforce sync?' },
-      { speaker: 'AI', text: 'Absolutely! Our voice agent grounds directly on your product docs to answer technical FAQs in real-time, and bi-directionally syncs all call transcripts and meeting notes into Salesforce within 5 seconds.' },
-      { speaker: 'PROSPECT', text: 'That sounds impressive. Can we schedule a 20-minute technical demonstration this Tuesday at 11 AM IST?' },
-      { speaker: 'AI', text: 'Perfect! I have reserved Tuesday at 11:00 AM IST for your executive demo. A calendar invite and summary have been dispatched to rahul.mehta@acmedigital.com.' },
-    ],
   }
 
-  // Web Speech API execution
-  function speakSentence(text: string) {
+  // Web Speech API execution in the selected language (gu-IN, hi-IN, en-US)
+  function speakSentence(text: string, lang: SupportedLanguage = callLanguage) {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel()
       const utterance = new SpeechSynthesisUtterance(text)
-      if (language === 'hi') utterance.lang = 'hi-IN'
-      else if (language === 'gu') utterance.lang = 'gu-IN'
+      if (lang === 'hi') utterance.lang = 'hi-IN'
+      else if (lang === 'gu') utterance.lang = 'gu-IN'
       else utterance.lang = 'en-US'
 
-      utterance.rate = 1.05
+      utterance.rate = 1.0
       utterance.onstart = () => setSpeechActive(true)
       utterance.onend = () => setSpeechActive(false)
       utterance.onerror = () => setSpeechActive(false)
@@ -157,6 +187,31 @@ export function PipelineJourney() {
         </div>
       </div>
 
+      {/* Dual Pathway Banner: Discovery vs AI Calling Only */}
+      <div className="p-3 bg-bg-card border border-amber-500/30 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-2xs animate-fade-in">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <PhoneCall className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-text-primary">Have Your Own Prospect List?</span>
+              <span className="badge-amber font-mono text-3xs font-semibold">AI Calling Only Mode</span>
+            </div>
+            <span className="text-text-muted">
+              Users can upload their own leads via CSV/Excel and skip AI web discovery, jumping straight to Stage 5: Multilingual Voice Outreach.
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={() => navigate('/campaigns')}
+          className="btn-secondary text-2xs py-1.5 px-3 border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 whitespace-nowrap self-start md:self-auto flex items-center gap-1.5"
+        >
+          <PhoneCall className="w-3 h-3" />
+          <span>🚀 AI Calling Only Campaign</span>
+        </button>
+      </div>
+
       {/* Stepper Navigation Bar */}
       <div className="panel p-2.5 overflow-x-auto scrollbar-thin">
         <div className="flex items-center gap-1.5 min-w-[720px]">
@@ -208,24 +263,70 @@ export function PipelineJourney() {
                   <Globe className="w-4 h-4 text-amber-400" />
                   <span className="text-xs font-bold text-text-primary">Step 1: Understand Business & Ideal Customer Profile</span>
                 </div>
-                <span className="badge-success text-2xs">ANALYZED</span>
+                <div className="flex items-center gap-2">
+                  <span className="badge-success text-2xs">ANALYZED</span>
+                  <button onClick={() => navigate('/onboarding')} className="text-2xs text-amber-400 hover:underline flex items-center gap-1">
+                    Edit Profile <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
               <div className="p-3 bg-bg-card rounded-lg border border-bg-border space-y-2">
-                <div className="text-xs font-semibold text-text-primary">Corporate Website Analyzed</div>
-                <p className="text-xs font-mono text-amber-400">https://callistoai.com</p>
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold text-text-primary">Corporate Website Analyzed</div>
+                  <span className="badge-blue text-3xs font-mono">{businessProfile?.industry || 'B2B Enterprise SaaS'}</span>
+                </div>
+                <p className="text-xs font-mono text-amber-400">{businessProfile?.companyUrl || 'https://callistoai.com'}</p>
                 <p className="text-2xs text-text-secondary leading-relaxed">
-                  AI crawler successfully ingested value propositions, pricing tiers, pitch decks, and technical FAQs.
-                  Grounded the AI Voice Agent to represent your company with high domain fidelity.
+                  {businessProfile?.businessDesc || 'AI Voice Agent platform providing autonomous SDR calling, intent discovery, BANT qualification, and CRM synchronization.'}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+
+              {/* Ingested Products & Pricing */}
+              {businessProfile?.products && businessProfile.products.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-2xs text-text-muted uppercase font-bold flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3 text-amber-400" /> Catalog Offerings & Capabilities Grounded
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {businessProfile.products.map((p, idx) => (
+                      <div key={idx} className="p-2.5 bg-bg-secondary rounded border border-bg-border text-2xs">
+                        <div className="flex items-center justify-between font-semibold text-text-primary">
+                          <span>{p.name}</span>
+                          <span className="text-amber-400 font-mono text-3xs">{p.targetPrice}</span>
+                        </div>
+                        <div className="text-text-muted text-3xs mt-0.5">{p.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3 bg-bg-secondary rounded border border-bg-border">
-                  <div className="text-2xs text-text-muted uppercase font-bold">Target Personas Identified</div>
-                  <div className="mt-1 text-xs font-semibold text-text-primary">VP Sales, CTO, Head of Revenue Ops</div>
+                  <div className="text-2xs text-text-muted uppercase font-bold">Target Personas Identified (ICP)</div>
+                  <div className="mt-1 text-xs font-semibold text-text-primary flex flex-wrap gap-1">
+                    {(businessProfile?.personas && businessProfile.personas.length > 0
+                      ? businessProfile.personas.map(p => typeof p === 'string' ? p : `${p.title} (${p.budgetInfluence})`)
+                      : ['VP Sales', 'CTO', 'Head of Revenue Ops', 'Inside Sales Director']
+                    ).map((perTitle, i) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-bg-card border border-bg-border text-2xs text-text-secondary">
+                        {perTitle}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="p-3 bg-bg-secondary rounded border border-bg-border">
                   <div className="text-2xs text-text-muted uppercase font-bold">Search Keywords Synthesized</div>
-                  <div className="mt-1 text-xs font-semibold text-text-primary">AI calling, automated sales SDR, pipeline qualification</div>
+                  <div className="mt-1 text-xs font-semibold text-text-primary flex flex-wrap gap-1">
+                    {(businessProfile?.discoveryQueries && businessProfile.discoveryQueries.length > 0
+                      ? businessProfile.discoveryQueries
+                      : ['AI voice SDR', 'automated sales qualification', 'CRM conversational AI']
+                    ).map((q, i) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-2xs text-amber-400 font-mono">
+                        {q}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end pt-2">
@@ -242,10 +343,46 @@ export function PipelineJourney() {
               <div className="flex items-center justify-between border-b border-bg-border pb-3">
                 <div className="flex items-center gap-2">
                   <Radar className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs font-bold text-text-primary">Step 2: Discover Requirements & Leads (Source Transparency)</span>
+                  <span className="text-xs font-bold text-text-primary">Step 2: Discover Requirements & Leads (OSINT & Source Transparency)</span>
                 </div>
-                <span className="badge-blue text-2xs">PUBLIC PROVENANCE</span>
+                <div className="flex items-center gap-2">
+                  <span className="badge-blue text-2xs">PUBLIC PROVENANCE</span>
+                  <button onClick={() => navigate('/lead-discovery')} className="text-2xs text-amber-400 hover:underline flex items-center gap-1">
+                    Open OSINT Hub <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
+
+              {/* OSINT Tools & Citations Badge Row (as seen in Google Search AI Overview) */}
+              <div className="p-3 bg-bg-card rounded-lg border border-bg-border space-y-2">
+                <div className="text-2xs text-text-muted uppercase font-bold flex items-center justify-between">
+                  <span>OSINT Intelligence Engines Deployed</span>
+                  <div className="flex items-center gap-1 text-3xs font-mono text-text-muted">
+                    <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">Enrich.so +2</span>
+                    <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">YouTube +1</span>
+                    <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">Bishop Fox +1</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-2xs">
+                  <div className="p-2 bg-bg-secondary rounded border border-bg-border">
+                    <div className="font-bold text-text-primary">Google Dorks</div>
+                    <div className="text-3xs text-text-muted font-mono truncate">site: linkedin.com/posts</div>
+                  </div>
+                  <div className="p-2 bg-bg-secondary rounded border border-bg-border">
+                    <div className="font-bold text-text-primary">Social Searcher</div>
+                    <div className="text-3xs text-text-muted font-mono truncate">Real-time buyer intent</div>
+                  </div>
+                  <div className="p-2 bg-bg-secondary rounded border border-bg-border">
+                    <div className="font-bold text-text-primary">theHarvester</div>
+                    <div className="text-3xs text-text-muted font-mono truncate">MX & domain recon</div>
+                  </div>
+                  <div className="p-2 bg-bg-secondary rounded border border-bg-border">
+                    <div className="font-bold text-text-primary">Apollo.io / OSINT</div>
+                    <div className="text-3xs text-text-muted font-mono truncate">B2B direct contacts</div>
+                  </div>
+                </div>
+              </div>
+
               <div className="p-4 bg-bg-card rounded-lg border border-bg-border space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -361,16 +498,55 @@ export function PipelineJourney() {
           {/* Stage 5 & 6: AI Voice Call & Live Response Handling */}
           {(activeStep === 5 || activeStep === 6) && (
             <div className="panel p-5 space-y-4 animate-fade-in border-amber-500/40">
-              <div className="flex items-center justify-between border-b border-bg-border pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-bg-border pb-3">
                 <div className="flex items-center gap-2">
                   <PhoneCall className="w-4 h-4 text-amber-400 animate-bounce" />
                   <span className="text-xs font-bold text-text-primary">
                     {activeStep === 5 ? 'Step 5: Multilingual AI Voice Call Active' : 'Step 6: Live Response Handling & Grounded FAQs'}
                   </span>
                 </div>
-                <span className="flex items-center gap-1.5 text-2xs text-success font-mono">
-                  <span className="w-2 h-2 rounded-full bg-success animate-pulse" /> LIVE CALL (02:18)
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5 text-2xs text-success font-mono">
+                    <span className="w-2 h-2 rounded-full bg-success animate-pulse" /> LIVE CALL (02:18)
+                  </span>
+                </div>
+              </div>
+
+              {/* Language Selection & Location Auto-Detection Header */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-bg-card rounded-lg border border-bg-border">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xs text-text-muted uppercase font-bold flex items-center gap-1">
+                    <Languages className="w-3 h-3 text-amber-400" /> Calling Language:
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCallLanguage('gu')}
+                      className={`px-2 py-1 rounded text-2xs font-medium transition-all ${callLanguage === 'gu' ? 'bg-amber-500 text-black font-bold shadow-sm' : 'bg-bg-dark border border-bg-border text-text-secondary hover:text-text-primary'}`}
+                    >
+                      🇮🇳 ગુજરાતી (Gaurav)
+                    </button>
+                    <button
+                      onClick={() => setCallLanguage('hi')}
+                      className={`px-2 py-1 rounded text-2xs font-medium transition-all ${callLanguage === 'hi' ? 'bg-amber-500 text-black font-bold shadow-sm' : 'bg-bg-dark border border-bg-border text-text-secondary hover:text-text-primary'}`}
+                    >
+                      🇮🇳 हिन्दी (Swara)
+                    </button>
+                    <button
+                      onClick={() => setCallLanguage('en')}
+                      className={`px-2 py-1 rounded text-2xs font-medium transition-all ${callLanguage === 'en' ? 'bg-amber-500 text-black font-bold shadow-sm' : 'bg-bg-dark border border-bg-border text-text-secondary hover:text-text-primary'}`}
+                    >
+                      🇺🇸 English (Aria)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-2xs text-text-muted font-mono">
+                  <MapPin className="w-3 h-3 text-emerald-400" />
+                  <span>Location: <strong className="text-text-primary">{prospect.location}</strong></span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-3xs font-semibold">
+                    {callLanguage === 'gu' ? 'Gujarat Regional Match' : callLanguage === 'hi' ? 'North India Match' : 'Pan-India / Global'}
+                  </span>
+                </div>
               </div>
 
               {/* Audio Waveform Simulator */}
@@ -384,23 +560,56 @@ export function PipelineJourney() {
                     />
                   ))}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center justify-center gap-3">
                   <button
-                    onClick={() => speakSentence('Hello Rahul, this is Aria calling from Callisto AI Solutions. We help automate SDR pipeline qualification. Can we schedule a 20-minute demonstration?')}
+                    onClick={() => speakSentence(DIALOGUES[callLanguage][0].text, callLanguage)}
                     className="btn-primary text-2xs gap-1.5 py-1 px-3"
                   >
-                    <Volume2 className="w-3.5 h-3.5" /> Listen to AI Voice Agent
+                    <Volume2 className="w-3.5 h-3.5" />
+                    Listen in {callLanguage === 'gu' ? 'ગુજરાતી' : callLanguage === 'hi' ? 'हिन्दी' : 'English'}
                   </button>
-                  <span className="text-3xs text-text-muted font-mono">Neural Voice: Aria (Natural Conversational)</span>
+                  <span className="text-3xs text-text-muted font-mono">
+                    Voice Model: {callLanguage === 'gu' ? 'Gaurav (Gujarati Neural)' : callLanguage === 'hi' ? 'Swara (Hindi Neural)' : 'Aria (English Neural)'}
+                  </span>
                 </div>
               </div>
 
-              {/* Live transcript snippet */}
-              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                {prospect.dialogue.slice(0, activeStep === 5 ? 4 : 7).map((line, i) => (
-                  <div key={i} className={`p-2.5 rounded text-2xs leading-relaxed ${line.speaker === 'AI' ? 'bg-amber-500/10 border border-amber-500/30 text-text-primary' : 'bg-blue-500/10 border border-blue-500/30 text-blue-200'}`}>
-                    <span className="font-bold text-text-muted mr-1.5">{line.speaker === 'AI' ? 'AI Voice Agent:' : `${prospect.name}:`}</span>
-                    {line.text}
+              {/* Live transcript snippet with subtitles and per-turn playback */}
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {DIALOGUES[callLanguage].slice(0, activeStep === 5 ? 4 : 7).map((line, i) => (
+                  <div
+                    key={i}
+                    className={`p-2.5 rounded text-2xs leading-relaxed transition-all ${
+                      line.speaker === 'AI'
+                        ? 'bg-amber-500/10 border border-amber-500/30 text-text-primary'
+                        : 'bg-blue-500/10 border border-blue-500/30 text-blue-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-text-muted">
+                        {line.speaker === 'AI'
+                          ? `AI Voice Agent (${callLanguage === 'gu' ? 'ગૌરવ' : callLanguage === 'hi' ? 'स्वरा' : 'Aria'}):`
+                          : `${prospect.name}:`}
+                      </span>
+                      <button
+                        onClick={() => speakSentence(line.text, callLanguage)}
+                        className="p-1 rounded hover:bg-bg-dark text-text-muted hover:text-amber-400"
+                        title="Speak this line"
+                      >
+                        <Volume2 className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <div className="font-medium text-xs text-text-primary">
+                      {line.text}
+                    </div>
+
+                    {line.subtitle && (
+                      <div className="text-2xs text-text-muted mt-1 italic font-sans flex items-center gap-1">
+                        <span className="text-3xs uppercase font-bold text-amber-500/80 not-italic">EN SUB:</span>
+                        {line.subtitle}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
