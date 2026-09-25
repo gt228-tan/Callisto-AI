@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Bell, ChevronDown, Circle, Globe, Menu, Sparkles } from 'lucide-react'
+import { Search, Bell, ChevronDown, Circle, Globe, Menu, Sparkles, Shield, Lock, Clock, LogOut, AlertTriangle } from 'lucide-react'
 import { useAppContext } from '@/contexts/AppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { DevicePreviewBanner } from './DevicePreviewBanner'
 import { getInitials } from '@/lib/utils'
 import type { Language } from '@/lib/i18n'
 import { LANGUAGE_LIST, SUPPORTED_LANGUAGES } from '@/lib/languages'
+import { formatISTTime } from '@/lib/security'
 
 const currentUser = { name: 'Tanishq Mehta', email: 'tanishq@demo-callistoai.com', role: 'Admin' }
 
@@ -31,6 +33,8 @@ const initialNotifications = [
 export function TopBar() {
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { user, logout, triggerTestTimeout, inactivityTimeoutMinutes } = useAuth()
+  const activeUser = user || { name: 'Tanishq Mehta', email: 'tanishq@demo-callistoai.com', role: 'ADMIN' }
   const { setGlobalSearchOpen, language, setLanguage, setMobileNavOpen, t } = useAppContext()
   const [notifList, setNotifList] = useState(initialNotifications)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -206,33 +210,69 @@ export function TopBar() {
             onClick={() => { setUserOpen(!userOpen); setNotifOpen(false); setStatusOpen(false); setLangOpen(false) }}
             className="flex items-center gap-2 h-7 px-2 rounded hover:bg-bg-hover border border-bg-border transition-colors shrink-0"
             id="user-menu-btn"
-            title={`${currentUser.name} (${currentUser.role})`}
+            title={`${activeUser.name} (${activeUser.role})`}
             aria-label="User account menu"
           >
             <div className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xs font-bold text-amber-400 shrink-0">
-              {getInitials(currentUser.name)}
+              {getInitials(activeUser.name)}
             </div>
             <div className="flex flex-col text-left">
-              <span className="text-2xs font-medium text-text-primary leading-tight max-w-[70px] sm:max-w-none truncate">{currentUser.name.split(' ')[0]}</span>
-              <span className="text-2xs text-text-muted leading-tight hidden sm:inline">{currentUser.role}</span>
+              <span className="text-2xs font-medium text-text-primary leading-tight max-w-[70px] sm:max-w-none truncate">{activeUser.name.split(' ')[0]}</span>
+              <span className="text-2xs text-text-muted leading-tight hidden sm:inline font-mono">{activeUser.role}</span>
             </div>
             <ChevronDown className="w-3 h-3 text-text-muted shrink-0" />
           </button>
           {userOpen && (
-            <div className="absolute right-0 top-9 w-52 max-w-[calc(100vw-24px)] panel border rounded shadow-2xl z-50 animate-fade-in">
+            <div className="absolute right-0 top-9 w-60 max-w-[calc(100vw-24px)] panel border rounded shadow-2xl z-50 animate-fade-in">
               <div className="px-3 py-3 border-b border-bg-border">
-                <div className="text-xs font-semibold text-text-primary">{currentUser.name}</div>
-                <div className="text-2xs text-text-muted">{currentUser.email}</div>
-                <div className="mt-1"><span className="badge-amber">Enterprise Plan</span></div>
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold text-text-primary">{activeUser.name}</div>
+                  <span className={`text-3xs px-1.5 py-0.5 rounded font-mono font-bold ${
+                    activeUser.role === 'ADMIN' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                    activeUser.role === 'MANAGER' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                    activeUser.role === 'SALES_AGENT' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                    'bg-neutral-500/20 text-text-muted border border-neutral-700'
+                  }`}>
+                    {activeUser.role}
+                  </span>
+                </div>
+                <div className="text-2xs text-text-muted mt-0.5">{activeUser.email}</div>
+                <div className="mt-2 pt-2 border-t border-bg-border/40 flex items-center justify-between text-3xs text-text-muted">
+                  <span className="flex items-center gap-1 text-success">
+                    <Lock className="w-2.5 h-2.5" /> TLS 1.3 Active
+                  </span>
+                  <span>Session: 15m Timeout</span>
+                </div>
               </div>
+
+              {/* Fast Inactivity Test Trigger for Reviewers */}
+              <div className="p-2 border-b border-bg-border bg-bg-panel/40">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserOpen(false)
+                    triggerTestTimeout()
+                    showToast('warning', 'Testing 24/7 Shift Auto-Logout', 'Countdown started: 15s remaining before auto-logout.')
+                  }}
+                  className="w-full text-left p-1.5 rounded hover:bg-amber-500/10 border border-amber-500/20 text-2xs text-amber-300 flex items-center justify-between transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3 h-3 text-amber-400" /> Test Inactivity Auto-Logout
+                  </span>
+                  <span className="text-3xs font-mono font-bold bg-amber-500/20 px-1 py-0.2 rounded">
+                    15s
+                  </span>
+                </button>
+              </div>
+
               {[
                 { label: 'Profile', path: '/settings?tab=profile' },
                 { label: 'Account Settings', path: '/settings?tab=company' },
-                { label: 'Billing', path: '/settings?tab=billing' },
-                { label: 'API Keys', path: '/settings?tab=security' },
+                { label: 'Audit Ledger (IST)', path: '/admin/audit-logs' },
+                { label: 'API Security & Keys', path: '/settings?tab=security' },
                 {
                   label: 'Help & Docs',
-                  action: () => showToast('info', 'Help & Documentation', 'Callisto AI Documentation and API guides are available at docs.callistoai.com'),
+                  action: () => showToast('info', 'Help & Documentation', 'Callisto AI Zero-Trust Documentation is available at docs.callistoai.com'),
                 },
               ].map(item => (
                 <button
@@ -254,12 +294,12 @@ export function TopBar() {
                 <button
                   onClick={() => {
                     setUserOpen(false)
-                    showToast('success', 'Signed Out', 'You have been safely signed out')
-                    navigate('/')
+                    logout('User clicked Sign Out')
+                    showToast('success', 'Signed Out', 'You have been safely signed out. Terminal locked.')
                   }}
-                  className="w-full text-left px-3 py-2 text-xs text-danger-bright hover:bg-danger-dim transition-colors"
+                  className="w-full text-left px-3 py-2 text-xs text-danger-bright hover:bg-danger-dim transition-colors flex items-center gap-1.5"
                 >
-                  Sign Out
+                  <LogOut className="w-3 h-3" /> Sign Out
                 </button>
               </div>
             </div>

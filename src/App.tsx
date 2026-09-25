@@ -3,6 +3,11 @@ import { AppProvider } from '@/contexts/AppContext'
 import { ToastProvider } from '@/contexts/ToastContext'
 import { LeadProvider } from '@/contexts/LeadContext'
 import { CampaignProvider } from '@/contexts/CampaignContext'
+import { AuditProvider } from '@/contexts/AuditContext'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { Login } from '@/pages/Login'
+import { InactivityModal } from '@/components/auth/InactivityModal'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { AppShell } from '@/components/layout/AppShell'
 import { Dashboard } from '@/pages/Dashboard'
 import { BusinessOnboarding } from '@/pages/BusinessOnboarding'
@@ -24,47 +29,67 @@ import {
   AdminProductApprovals,
 } from '@/pages/Admin'
 
+function AppRoutes() {
+  const { isAuthenticated } = useAuth()
+
+  // Display enterprise Login page before any actual workspace views
+  if (!isAuthenticated) {
+    return <Login />
+  }
+
+  return (
+    <>
+      <InactivityModal />
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route path="/"                   element={<Dashboard />} />
+          <Route path="/business-onboarding" element={<BusinessOnboarding />} />
+          <Route path="/pipeline-journey"   element={<PipelineJourney />} />
+          <Route path="/lead-discovery"     element={<LeadDiscovery />} />
+          <Route path="/leads"              element={<Leads />} />
+          <Route path="/ai-qualification"   element={<AIQualification />} />
+          <Route path="/campaigns"          element={<Campaigns />} />
+          <Route path="/ai-voice-agent"     element={<AIVoiceAgent />} />
+          <Route path="/call-history"       element={<CallHistory />} />
+          <Route path="/market-intelligence" element={<MarketIntelligence />} />
+          <Route path="/pipeline"           element={<SalesPipeline />} />
+          <Route path="/analytics"          element={<Analytics />} />
+          <Route path="/crm"                element={<CRM />} />
+          <Route path="/settings"           element={<SettingsPage />} />
+
+          {/* Admin routes — Enforced by Zero-Trust ProtectedRoute RBAC guard */}
+          <Route path="/admin"              element={<ProtectedRoute requiredRole="ADMIN"><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/users"        element={<ProtectedRoute requiredRole="ADMIN"><AdminUsers /></ProtectedRoute>} />
+          <Route path="/admin/product-approvals" element={<ProtectedRoute requiredRole="ADMIN"><AdminProductApprovals /></ProtectedRoute>} />
+          <Route path="/admin/subscriptions" element={<ProtectedRoute requiredRole="ADMIN"><AdminSubscriptions /></ProtectedRoute>} />
+          <Route path="/admin/voice-usage"  element={<ProtectedRoute requiredRole="ADMIN"><AdminVoiceUsage /></ProtectedRoute>} />
+          <Route path="/admin/billing"      element={<ProtectedRoute requiredRole="ADMIN"><AdminBilling /></ProtectedRoute>} />
+          <Route path="/admin/audit-logs"   element={<ProtectedRoute requiredRole="ADMIN"><AdminAuditLogs /></ProtectedRoute>} />
+          <Route path="/admin/fraud"        element={<ProtectedRoute requiredRole="ADMIN"><AdminFraud /></ProtectedRoute>} />
+          <Route path="/admin/system"       element={<ProtectedRoute requiredRole="ADMIN"><AdminSystem /></ProtectedRoute>} />
+          <Route path="/admin/platform"     element={<ProtectedRoute requiredRole="ADMIN"><AdminPlatformSettings /></ProtectedRoute>} />
+        </Route>
+      </Routes>
+    </>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <AppProvider>
-        <ToastProvider>
-          <LeadProvider>
-            <CampaignProvider>
-              <Routes>
-                <Route element={<AppShell />}>
-                  <Route path="/"                   element={<Dashboard />} />
-                  <Route path="/business-onboarding" element={<BusinessOnboarding />} />
-                  <Route path="/pipeline-journey"   element={<PipelineJourney />} />
-                  <Route path="/lead-discovery"     element={<LeadDiscovery />} />
-                  <Route path="/leads"              element={<Leads />} />
-                  <Route path="/ai-qualification"   element={<AIQualification />} />
-                  <Route path="/campaigns"          element={<Campaigns />} />
-                  <Route path="/ai-voice-agent"     element={<AIVoiceAgent />} />
-                  <Route path="/call-history"       element={<CallHistory />} />
-                  <Route path="/market-intelligence" element={<MarketIntelligence />} />
-                  <Route path="/pipeline"           element={<SalesPipeline />} />
-                  <Route path="/analytics"          element={<Analytics />} />
-                  <Route path="/crm"                element={<CRM />} />
-                  <Route path="/settings"           element={<SettingsPage />} />
-
-                  {/* Admin routes */}
-                  <Route path="/admin"              element={<AdminDashboard />} />
-                  <Route path="/admin/users"        element={<AdminUsers />} />
-                  <Route path="/admin/product-approvals" element={<AdminProductApprovals />} />
-                  <Route path="/admin/subscriptions" element={<AdminSubscriptions />} />
-                  <Route path="/admin/voice-usage"  element={<AdminVoiceUsage />} />
-                  <Route path="/admin/billing"      element={<AdminBilling />} />
-                  <Route path="/admin/audit-logs"   element={<AdminAuditLogs />} />
-                  <Route path="/admin/fraud"        element={<AdminFraud />} />
-                  <Route path="/admin/system"       element={<AdminSystem />} />
-                  <Route path="/admin/platform"     element={<AdminPlatformSettings />} />
-                </Route>
-              </Routes>
-            </CampaignProvider>
-          </LeadProvider>
-        </ToastProvider>
-      </AppProvider>
+      <AuditProvider>
+        <AuthProvider>
+          <AppProvider>
+            <ToastProvider>
+              <LeadProvider>
+                <CampaignProvider>
+                  <AppRoutes />
+                </CampaignProvider>
+              </LeadProvider>
+            </ToastProvider>
+          </AppProvider>
+        </AuthProvider>
+      </AuditProvider>
     </BrowserRouter>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Link2, CheckCircle, XCircle, RefreshCw, Settings, Upload, Download,
   Server, Globe, Database, Activity, Terminal, Copy, Check, ExternalLink,
@@ -7,6 +7,8 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { useLeads } from '@/contexts/LeadContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { useAudit } from '@/contexts/AuditContext'
 import { exportLeadsToExcel, exportLeadsToCSV } from '@/lib/excelLeads'
 import { ImportLeadsModal } from '@/components/ui/ImportLeadsModal'
 import {
@@ -101,8 +103,37 @@ export function CRM() {
     setTimeout(() => setCopiedCode(null), 2000)
   }
 
+  const { user, can } = useAuth()
+  const { logAction } = useAudit()
+  const syncRateLimitRef = useRef<number[]>([])
+  const MAX_SYNCS_PER_MINUTE = 10
+
+  function checkSyncRateLimit(): boolean {
+    const now = Date.now()
+    syncRateLimitRef.current = syncRateLimitRef.current.filter((t: number) => t > now - 60000)
+    if (syncRateLimitRef.current.length >= MAX_SYNCS_PER_MINUTE) {
+      return false
+    }
+    syncRateLimitRef.current.push(now)
+    return true
+  }
+
   // --- CRM Actions ---
   function handleConnectCrm(id: string) {
+    if (!can('canSyncCrm')) {
+      showToast('error', 'Access Denied', `Role ${user?.role || 'VIEWER'} does not have CRM integration permissions.`)
+      logAction({
+        userId: user?.id,
+        userName: user?.name,
+        userRole: user?.role,
+        action: 'UNAUTHORIZED_CRM_CONNECT_BLOCKED',
+        resource: `CRM: ${id}`,
+        status: 'BLOCKED',
+        details: `Role ${user?.role} attempted CRM OAuth handshake without authorization.`,
+      })
+      return
+    }
+
     setCrms(prev => prev.map(c => c.id === id ? { ...c, status: 'SYNCING' } : c))
     showToast('info', 'Connecting CRM...', `Initiating OAuth handshake with ${id}`)
 
@@ -119,11 +150,53 @@ export function CRM() {
         message: `Successfully authenticated OAuth2 token for ${targetCrm?.name || id}`,
       })
       setLogs(loadSyncLogs())
+
+      logAction({
+        userId: user?.id,
+        userName: user?.name,
+        userEmail: user?.email,
+        userRole: user?.role,
+        action: 'CRM_OAUTH_CONNECTED',
+        resource: `CRM: ${targetCrm?.name || id}`,
+        status: 'SUCCESS',
+        details: `OAuth2 token verified and integration activated for ${targetCrm?.name || id}.`,
+      })
+
       showToast('success', 'Connected!', `Successfully integrated with ${targetCrm?.name || id}`)
     }, 1500)
   }
 
   function handleSyncCrm(id: string) {
+    // 1. RBAC Clearance Enforcement
+    if (!can('canSyncCrm')) {
+      showToast('error', 'Access Denied', `Role ${user?.role || 'VIEWER'} does not hold CRM write/sync permissions.`)
+      logAction({
+        userId: user?.id,
+        userName: user?.name,
+        userRole: user?.role,
+        action: 'UNAUTHORIZED_CRM_SYNC_BLOCKED',
+        resource: `CRM: ${id}`,
+        status: 'BLOCKED',
+        details: `Role ${user?.role} attempted manual/auto sync without required clearance.`,
+      })
+      return
+    }
+
+    // 2. Sliding Window Rate Limiting Shield (Anti-DoS)
+    if (!checkSyncRateLimit()) {
+      showToast('warning', 'Rate Limit Throttled', 'Rate limit shield active (10 syncs/min quota). Please wait before triggering another sync.')
+      logAction({
+        userId: user?.id,
+        userName: user?.name,
+        userRole: user?.role,
+        action: 'CRM_SYNC_RATE_LIMIT_BLOCKED',
+        resource: `CRM: ${id}`,
+        status: 'BLOCKED',
+        details: 'Rate limit threshold hit (10 sync requests in 60 seconds). Throttled.',
+      })
+      return
+    }
+
     setCrms(prev => prev.map(c => c.id === id ? { ...c, status: 'SYNCING' } : c))
     const targetCrm = crms.find(c => c.id === id)
     showToast('info', 'Sync Started', `Syncing bidirectional records with ${targetCrm?.name || id}...`)
@@ -148,6 +221,19 @@ export function CRM() {
         payloadSummary: JSON.stringify({ synced: recordsUpdated, status: 'OK', direction: targetCrm?.syncDirection }),
       })
       setLogs(loadSyncLogs())
+
+      // Action-level write logging tied to User ID + IST Timestamp + IP
+      logAction({
+        userId: user?.id,
+        userName: user?.name,
+        userEmail: user?.email,
+        userRole: user?.role,
+        action: 'CRM_AUTO_SYNC_EXECUTE',
+        resource: `CRM: ${targetCrm?.name || id}`,
+        status: 'SUCCESS',
+        details: `Synchronized ${recordsUpdated} lead records with ${targetCrm?.name || id} (Direction: ${targetCrm?.syncDirection || 'BIDIRECTIONAL'}).`,
+      })
+
       showToast('success', 'Sync Complete', `Synchronized ${recordsUpdated} records with ${targetCrm?.name || id}`)
     }, 1200)
   }

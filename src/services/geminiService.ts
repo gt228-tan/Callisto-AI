@@ -1,4 +1,6 @@
 
+import { sanitizeInput, hasInjectionRisk } from '@/lib/security'
+
 export interface ConversationTurn {
   speaker: 'AI' | 'PROSPECT'
   text: string
@@ -20,8 +22,27 @@ export interface SalesResponseResult {
   text: string
   isGemini: boolean
   modelUsed?: string
+  rateLimited?: boolean
 }
 
+// Ask AI Rate Limiter (Max 15 requests / 60 seconds)
+const aiRateLimitHistory: number[] = []
+const MAX_AI_CALLS_PER_MINUTE = 15
+
+export function checkAiRateLimit(): { allowed: boolean; remaining: number; retryAfterSec?: number } {
+  const now = Date.now()
+  // Clean entries older than 60s
+  while (aiRateLimitHistory.length > 0 && aiRateLimitHistory[0] < now - 60000) {
+    aiRateLimitHistory.shift()
+  }
+  if (aiRateLimitHistory.length >= MAX_AI_CALLS_PER_MINUTE) {
+    const oldest = aiRateLimitHistory[0]
+    const retryAfterSec = Math.max(1, Math.ceil((oldest + 60000 - now) / 1000))
+    return { allowed: false, remaining: 0, retryAfterSec }
+  }
+  aiRateLimitHistory.push(now)
+  return { allowed: true, remaining: MAX_AI_CALLS_PER_MINUTE - aiRateLimitHistory.length }
+}
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-1.5-flash'
 export const DISPLAY_ENGINE_LABEL = 'gemini-3.8-flash'
@@ -75,6 +96,19 @@ export async function generateGeminiSalesResponse(
   const pName = prospectName.trim() || 'Rohan Verma'
   const pFirst = pName.split(' ')[0] || 'Rohan'
 
+  // Rate Limiting Shield: Max 15 calls / minute to prevent DoS / API abuse
+  const rateCheck = checkAiRateLimit()
+  if (!rateCheck.allowed) {
+    return {
+      text: `[Rate Limiting Shield Active]: API velocity threshold exceeded (15 req/min protection). Please wait ${rateCheck.retryAfterSec}s before retrying.`,
+      isGemini: false,
+      rateLimited: true,
+    }
+  }
+
+  // Input Sanitization & Anti-Injection Guard
+  const cleanMessage = sanitizeInput(userMessage)
+
   const apiKey = getGeminiApiKey()
 
   // 1. Live Gemini API Call
@@ -96,7 +130,7 @@ export async function generateGeminiSalesResponse(
                 role: c.speaker === 'AI' ? 'model' : 'user',
                 parts: [{ text: c.text }]
               })),
-              { role: 'user', parts: [{ text: userMessage }] }
+              { role: 'user', parts: [{ text: cleanMessage }] }
             ]
           })
         }

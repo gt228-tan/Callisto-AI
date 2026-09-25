@@ -1,20 +1,37 @@
-The AI Voice Agent should handle inbound/outbound multilingual calls, qualification, FAQs, callbacks, voicemail, retries, transcripts, summaries, and next-best actions, and highlight interested prospects for follow-up. Users should be able to schedule campaigns by location/time zone, monitor performance and repeat campaigns.
+-Add a login page before the actual stuff is displayed. It shows different login options (different roles with different levels of privileges, admin has most critical privileges and so on)
 
- 
+-In audit logs, logs aren't being shown for each action, improve it. Show logs for every action with proper IST timestamp
 
-The platform should also provide Lead Management, AI Qualification, Market Intelligence, CRM Integration, Campaign Management, Analytics, Authentication, Roles, Notifications, Subscriptions, Billing, Voice Usage, Audit Logs, Fraud Detection, Admin Management, Security, Encryption, API integration and scalable enterprise architecture.
+-Add otp based MFA.
 
- 
+Let's make the system more secure by implementing Authentication & Access Control. lets add :
 
-The platform must be multilingual, and lead/contact information must be based on publicly available data or supported integrations, with source transparency. 
+Multi-factor authentication (MFA) for admin and other role logins — highest-impact roles first
 
+Role-Based Access Control (RBAC) enforcement at the API level, not just UI — hide/show tabs is not enough; each backend route should independently verify role permissions
 
-AI Sales Agent is an end-to-end AI sales platform that should discover the right prospects, enrich and qualify them, engage them through AI calling, and help businesses convert opportunities faster.
+Session timeout / auto-logout after inactivity, especially relevant since terminals run 24/7 shifts.
 
- 
+These 3 should work perfectly as security is most important.
 
-Users should be able to access the platform through Web, Android and iOS, provide their company URL, business information, products/services or documents, and let AI understand what the business offers and who their potential customers are.
+Data Protection
 
+Encryption at rest for master data 
+Encryption in transit — enforce HTTPS/TLS everywhere 
+Field-level masking for sensitive operational data in exports/CSV 
 
+Audit & Integrity
 
-Final expectation: Understand Business → Discover Requirements & Leads → Enrich → Qualify → AI Call → Capture Response → Transcript & Insights → Identify Interested Prospects → Enable Follow-up.
+Tamper-evident activity log — hash-chain or append-only log so entries can't be silently edited, strengthening the existing Activity Log feature
+Action-level logging tied to user ID + timestamp + IP for every write operation 
+
+Input & API Security
+
+Input validation/sanitization on all forms (if any) to prevent injection attacks
+Rate limiting on API endpoints, particularly Ask AI and Auto Sync, to prevent abuse/DoS
+
+Monitoring
+
+Anomaly detection on the Activity Log — flag unusual patterns 
+
+Alerting integrated with the existing dashboard for security events, not just operational ones

@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Zap, CheckCircle, Megaphone, Phone, Calendar, TrendingUp, Mic, LayoutDashboard, ExternalLink, Workflow, Globe, ArrowRight, Sparkles } from 'lucide-react'
+import { Users, Zap, CheckCircle, Megaphone, Phone, Calendar, TrendingUp, Mic, LayoutDashboard, ExternalLink, Workflow, Globe, ArrowRight, Sparkles, Shield, ShieldAlert, ShieldCheck, Lock, Activity, AlertTriangle, ScrollText } from 'lucide-react'
 import { useAppContext } from '@/contexts/AppContext'
+import { useAudit } from '@/contexts/AuditContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, FunnelChart, Funnel, LabelList } from 'recharts'
 import { MetricCard } from '@/components/ui/MetricCard'
 import { ActivityStream } from '@/components/ui/ActivityStream'
@@ -127,15 +129,29 @@ function CustomTooltip({ active, payload, label }: any) {
 export function Dashboard() {
   const navigate = useNavigate()
   const { t } = useAppContext()
+  const { user } = useAuth()
+  const { securityAlerts, logs, integrityStatus } = useAudit()
   const tableColumns = getTableColumns(navigate)
   const [timeRange, setTimeRange] = useState<TimeRange>('24H')
   const [chartData, setChartData] = useState(() => generateTimeData('24H'))
   const [events, setEvents] = useState<ActivityEvent[]>(() => generateActivityEvents())
+  const [streamMode, setStreamMode] = useState<'operational' | 'security'>('operational')
   const intervalRef = useRef<number | null>(null)
 
   useEffect(() => {
     setChartData(generateTimeData(timeRange))
   }, [timeRange])
+
+  // Map immutable audit logs to ActivityEvent stream with IST timestamps
+  const auditEvents: ActivityEvent[] = logs.slice(-20).reverse().map(l => ({
+    id: l.id,
+    timestamp: new Date(l.timestamp),
+    type: l.action,
+    title: `${l.userName} (${l.userRole}): ${l.resource}`,
+    detail: `[IST: ${l.timestampIST}] Client IP: ${l.ip} | ${l.details}`,
+    severity: l.status === 'SUCCESS' ? 'success' : l.status === 'BLOCKED' || l.status === 'FAILED' ? 'error' : 'warning',
+    source: `Block #${l.sequence}`,
+  }))
 
   // Simulate live stream
   useEffect(() => {
@@ -197,6 +213,50 @@ export function Dashboard() {
             <Workflow className="w-3.5 h-3.5" />
             {t('dash.launchPipeline', 'Launch Pipeline Journey')}
             <ArrowRight className="w-3 h-3 ml-0.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Security Threat & Anomaly Monitoring Alert Banner */}
+      <div className="p-3.5 rounded-lg bg-bg-panel border border-blue-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0">
+            <Shield className="w-4 h-4 text-blue-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-text-primary">Enterprise Security & Threat Monitoring</span>
+              <span className="text-3xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono font-bold border border-blue-500/30">
+                ZERO-TRUST RBAC ({user?.role || 'ADMIN'})
+              </span>
+              <span className="text-3xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-500/30 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" /> SHA-256 LEDGER IMMUTABLE ({integrityStatus.blockCount} BLOCKS)
+              </span>
+            </div>
+            <div className="text-2xs text-text-secondary mt-0.5">
+              {securityAlerts.length > 0 ? (
+                <span className="text-danger-bright font-medium flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  {securityAlerts[0]?.title} — IP: {securityAlerts[0]?.sourceIp} ({securityAlerts[0]?.timestampIST})
+                </span>
+              ) : (
+                <span>All 24/7 security perimeter controls active. No unhandled anomaly spikes detected.</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => navigate('/admin/audit-logs')}
+            className="btn-secondary text-2xs gap-1 py-1.5 px-2.5"
+          >
+            <ScrollText className="w-3 h-3 text-amber-400" /> View IST Audit Log
+          </button>
+          <button
+            onClick={() => navigate('/admin/fraud')}
+            className="btn-secondary text-2xs gap-1 py-1.5 px-2.5 text-danger-bright border-danger/30 hover:bg-danger-dim"
+          >
+            <ShieldAlert className="w-3 h-3" /> Anomaly Center ({securityAlerts.length})
           </button>
         </div>
       </div>
@@ -316,15 +376,36 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* AI Activity Stream */}
+        {/* AI Activity Stream with Security Toggle */}
         <div className="xl:col-span-2 panel flex flex-col">
-          <div className="section-header">
-            <span className="section-title">{t('dash.activityStream', 'AI Activity Stream')}</span>
-            <span className="text-2xs text-success flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />LIVE
-            </span>
+          <div className="section-header flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="section-title">
+                {streamMode === 'operational' ? t('dash.activityStream', 'AI Activity Stream') : 'Security & Tamper Audit Stream (IST)'}
+              </span>
+              <span className="text-2xs text-success flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />LIVE
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1 p-0.5 bg-bg-panel border border-bg-border rounded text-2xs">
+              <button
+                type="button"
+                onClick={() => setStreamMode('operational')}
+                className={`px-2 py-0.5 rounded transition-colors ${streamMode === 'operational' ? 'bg-amber-500/20 text-amber-300 font-semibold' : 'text-text-muted hover:text-text-primary'}`}
+              >
+                Operational Stream
+              </button>
+              <button
+                type="button"
+                onClick={() => setStreamMode('security')}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${streamMode === 'security' ? 'bg-blue-500/20 text-blue-300 font-semibold' : 'text-text-muted hover:text-text-primary'}`}
+              >
+                <Lock className="w-2.5 h-2.5" /> Security Audit (IST)
+              </button>
+            </div>
           </div>
-          <ActivityStream events={events} maxHeight="280px" live />
+          <ActivityStream events={streamMode === 'operational' ? events : auditEvents} maxHeight="280px" live />
         </div>
       </div>
 

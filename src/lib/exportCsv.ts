@@ -1,17 +1,27 @@
+import { maskSensitiveRecord } from './security'
+
 /**
  * Utility to convert an array of objects into a formatted CSV file and trigger download.
+ * Enforces field-level masking for sensitive operational data (phone, email, IP, secrets)
+ * per enterprise data privacy regulations (GDPR, DPDP Act 2023).
  */
 export function exportToCSV<T extends Record<string, any>>(
   filename: string,
   data: T[],
-  columns?: { key: keyof T | string; label: string }[]
+  columns?: { key: keyof T | string; label: string }[],
+  options: { maskSensitiveFields?: boolean } = { maskSensitiveFields: true }
 ): boolean {
   if (!data || data.length === 0) return false
+
+  // Apply field-level masking if enabled
+  const processedData = options.maskSensitiveFields
+    ? data.map(item => maskSensitiveRecord(item, true))
+    : data
 
   // Determine headers
   const headers = columns && columns.length > 0
     ? columns
-    : Object.keys(data[0]).map(k => ({ key: k, label: k.toUpperCase() }))
+    : Object.keys(processedData[0]).map(k => ({ key: k, label: k.toUpperCase() }))
 
   // Helper to format values cleanly for CSV
   function formatValue(val: any): string {
@@ -31,7 +41,7 @@ export function exportToCSV<T extends Record<string, any>>(
 
   const headerRow = headers.map(h => escapeCSV(h.label)).join(',')
 
-  const dataRows = data.map(row => {
+  const dataRows = processedData.map(row => {
     return headers
       .map(h => {
         const val = row[h.key as keyof T]

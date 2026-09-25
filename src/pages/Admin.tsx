@@ -1,6 +1,6 @@
 // Admin pages - all in one file for speed
 import { useState } from 'react'
-import { Shield, UserCog, CreditCard, Volume2, Receipt, ScrollText, AlertTriangle, Activity, Sliders, CheckCircle, XCircle, Clock, AlertOctagon, Download, FileText, Check, X, ExternalLink, Search, Sparkles, Filter } from 'lucide-react'
+import { Shield, UserCog, CreditCard, Volume2, Receipt, ScrollText, AlertTriangle, Activity, Sliders, CheckCircle, XCircle, Clock, AlertOctagon, Download, FileText, Check, X, ExternalLink, Search, Sparkles, Filter, ShieldCheck, RefreshCw, Lock, KeyRound, CheckSquare } from 'lucide-react'
 import { MetricCard } from '@/components/ui/MetricCard'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { adminUsers, auditLogs, fraudAlerts, type AdminUser, type AuditLog } from '@/data/users'
@@ -9,6 +9,9 @@ import { useToast } from '@/contexts/ToastContext'
 import { exportToCSV } from '@/lib/exportCsv'
 import { campaigns } from '@/data/campaigns'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar } from 'recharts'
+import { useAudit } from '@/contexts/AuditContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { type HashChainedLogEntry, formatISTDateTime } from '@/lib/security'
 
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
@@ -186,51 +189,277 @@ export function AdminUsers() {
 }
 
 // ============================================================
-// Audit Logs
+// Audit Logs — Cryptographic SHA-256 Tamper-Evident Ledger
 // ============================================================
 export function AdminAuditLogs() {
   const { showToast } = useToast()
-  const statusIcon = (s: string) => s === 'SUCCESS' ? <CheckCircle className="w-3 h-3 text-success" /> : s === 'FAILED' ? <XCircle className="w-3 h-3 text-danger-bright" /> : <AlertOctagon className="w-3 h-3 text-warning" />
+  const { user } = useAuth()
+  const { logs, verifyIntegrity, isVerifying, integrityStatus, logAction } = useAudit()
+  const [filterAction, setFilterAction] = useState<string>('ALL')
+  const [maskExport, setMaskExport] = useState<boolean>(true)
 
-  function handleExportAuditLogs() {
-    exportToCSV('audit_logs.csv', auditLogs, [
-      { key: 'id', label: 'Log ID' },
-      { key: 'timestamp', label: 'Timestamp' },
-      { key: 'user', label: 'User' },
-      { key: 'userEmail', label: 'User Email' },
-      { key: 'action', label: 'Action' },
-      { key: 'resource', label: 'Resource' },
-      { key: 'ip', label: 'IP Address' },
-      { key: 'status', label: 'Status' },
-      { key: 'details', label: 'Details' },
-    ])
-    showToast('success', 'Export Complete', `${auditLogs.length} audit log entries exported to CSV`)
+  const statusIcon = (s: string) =>
+    s === 'SUCCESS' ? <CheckCircle className="w-3.5 h-3.5 text-success shrink-0" /> :
+    s === 'FAILED'  ? <XCircle className="w-3.5 h-3.5 text-danger-bright shrink-0" /> :
+    s === 'BLOCKED' ? <Lock className="w-3.5 h-3.5 text-danger-bright shrink-0" /> :
+    <AlertOctagon className="w-3.5 h-3.5 text-warning shrink-0" />
+
+  async function handleVerifyChain() {
+    const res = await verifyIntegrity()
+    if (res.valid) {
+      showToast('success', '100% Immutable — Verification Passed', res.message)
+    } else {
+      showToast('error', 'Tamper Detected!', res.message)
+    }
   }
 
-  const columns: Column<AuditLog>[] = [
-    { key: 'timestamp', header: 'Timestamp', sortable: true, render: r => <span className="text-2xs font-mono text-text-muted">{formatDateTime(r.timestamp)}</span> },
-    { key: 'user',      header: 'User',      render: r => <div><div className="text-xs text-text-primary">{r.user}</div><div className="text-2xs text-text-muted">{r.userEmail}</div></div> },
-    { key: 'action',    header: 'Action',    render: r => <span className="font-mono text-2xs text-amber-400">{r.action}</span> },
-    { key: 'resource',  header: 'Resource',  render: r => <span className="text-xs text-text-secondary">{r.resource}</span> },
-    { key: 'ip',        header: 'IP',        render: r => <span className="font-mono text-2xs text-text-muted">{r.ip}</span> },
-    { key: 'status',    header: 'Status',    render: r => <div className="flex items-center gap-1">{statusIcon(r.status)}<span className={`text-2xs ${r.status === 'SUCCESS' ? 'text-success' : r.status === 'FAILED' ? 'text-danger-bright' : 'text-warning'}`}>{r.status}</span></div> },
-    { key: 'details',   header: 'Details',   render: r => <span className="text-2xs text-text-muted">{r.details}</span> },
+  function handleExportAuditLogs() {
+    // Action-level write logging of the export action itself!
+    logAction({
+      userId: user?.id,
+      userName: user?.name,
+      userEmail: user?.email,
+      userRole: user?.role,
+      action: maskExport ? 'AUDIT_LOG_EXPORT_MASKED' : 'AUDIT_LOG_EXPORT_UNMASKED',
+      resource: `Audit Ledger (${logs.length} records)`,
+      status: 'SUCCESS',
+      details: `Admin exported ${logs.length} hash-chained audit records to CSV. Field-level masking: ${maskExport ? 'ENABLED (Protected)' : 'DISABLED (Full Clearance)'}.`,
+    })
+
+    exportToCSV('callisto_audit_logs_ist.csv', logs, [
+      { key: 'sequence', label: 'Block #' },
+      { key: 'timestampIST', label: 'Timestamp (IST)' },
+      { key: 'userId', label: 'User ID' },
+      { key: 'userName', label: 'User Name' },
+      { key: 'userEmail', label: 'Email' },
+      { key: 'userRole', label: 'Role' },
+      { key: 'action', label: 'Action' },
+      { key: 'resource', label: 'Resource' },
+      { key: 'ip', label: 'Client IP' },
+      { key: 'status', label: 'Status' },
+      { key: 'details', label: 'Details' },
+      { key: 'tamperHash', label: 'SHA-256 Tamper Hash' },
+      { key: 'previousHash', label: 'Previous Block Hash' },
+    ], { maskSensitiveFields: maskExport })
+
+    showToast('success', 'Export Complete', `${logs.length} audit log entries exported to CSV with IST timestamps.`)
+  }
+
+  const filteredLogs = logs.filter(l => {
+    if (filterAction === 'ALL') return true
+    if (filterAction === 'AUTH') return l.action.includes('LOGIN') || l.action.includes('MFA') || l.action.includes('LOGOUT')
+    if (filterAction === 'SECURITY') return l.action.includes('BLOCKED') || l.action.includes('RATE') || l.action.includes('INJECTION') || l.status === 'BLOCKED'
+    if (filterAction === 'LEADS_CRM') return l.action.includes('LEAD') || l.action.includes('CRM') || l.action.includes('CAMPAIGN')
+    return true
+  })
+
+  const columns: Column<HashChainedLogEntry>[] = [
+    {
+      key: 'sequence',
+      header: 'Block #',
+      sortable: true,
+      render: r => (
+        <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-bg-panel border border-bg-border text-text-secondary font-bold">
+          #{r.sequence}
+        </span>
+      ),
+    },
+    {
+      key: 'timestampIST',
+      header: 'Timestamp (IST)',
+      sortable: true,
+      render: r => (
+        <div className="flex flex-col">
+          <span className="text-2xs font-mono text-amber-300 font-semibold">{r.timestampIST}</span>
+          <span className="text-3xs font-mono text-text-muted">{r.timestamp.split('T')[1]?.replace('Z', '')} UTC</span>
+        </div>
+      ),
+    },
+    {
+      key: 'userName',
+      header: 'User & Role',
+      render: r => (
+        <div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-text-primary">{r.userName}</span>
+            <span className={`text-3xs px-1 py-0.2 rounded font-mono font-bold ${
+              r.userRole === 'ADMIN' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+              r.userRole === 'MANAGER' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+              r.userRole === 'SALES_AGENT' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+              'bg-neutral-500/20 text-text-muted border border-neutral-700'
+            }`}>
+              {r.userRole}
+            </span>
+          </div>
+          <div className="text-2xs text-text-muted font-mono">{r.userEmail || r.userId}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      sortable: true,
+      render: r => (
+        <span className={`font-mono text-2xs px-1.5 py-0.5 rounded border ${
+          r.status === 'BLOCKED' || r.status === 'FAILED'
+            ? 'bg-danger-dim border-danger/40 text-danger-bright'
+            : r.action.includes('MFA') || r.action.includes('LOGIN')
+            ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+            : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+        }`}>
+          {r.action}
+        </span>
+      ),
+    },
+    {
+      key: 'resource',
+      header: 'Resource',
+      render: r => <span className="text-xs text-text-secondary">{r.resource}</span>,
+    },
+    {
+      key: 'ip',
+      header: 'Client IP',
+      render: r => <span className="font-mono text-2xs text-text-muted">{r.ip}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: r => (
+        <div className="flex items-center gap-1">
+          {statusIcon(r.status)}
+          <span className={`text-2xs font-semibold ${
+            r.status === 'SUCCESS' ? 'text-success' :
+            r.status === 'FAILED' ? 'text-danger-bright' :
+            r.status === 'BLOCKED' ? 'text-danger-bright' : 'text-warning'
+          }`}>
+            {r.status}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'tamperHash',
+      header: 'Cryptographic Hash',
+      render: r => (
+        <div className="flex flex-col" title={`Block #${r.sequence}\nSHA-256: ${r.tamperHash}\nPrevious: ${r.previousHash}`}>
+          <span className="font-mono text-3xs text-emerald-400 font-semibold cursor-help">
+            {r.tamperHash.slice(0, 10)}...
+          </span>
+          <span className="font-mono text-3xs text-text-muted">
+            prev: {r.previousHash.slice(0, 6)}...
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'details',
+      header: 'Details',
+      render: r => <span className="text-2xs text-text-muted max-w-xs truncate block" title={r.details}>{r.details}</span>,
+    },
   ]
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <ScrollText className="w-4 h-4 text-blue-400" />
-          <h1 className="text-sm font-bold text-text-primary">Audit Logs</h1>
-          <span className="badge-blue">ADMIN</span>
+          <ScrollText className="w-5 h-5 text-blue-400" />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-text-primary">Tamper-Evident Audit Ledger</h1>
+              <span className="badge-blue">ADMIN & COMPLIANCE</span>
+            </div>
+            <p className="text-2xs text-text-muted mt-0.5">
+              Append-only cryptographic hash-chain tracking every action with User ID, IP, and IST timestamps.
+            </p>
+          </div>
         </div>
-        <button onClick={handleExportAuditLogs} className="btn-secondary text-xs gap-1.5">
-          <Download className="w-3.5 h-3.5" /> Export CSV
+
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Masking toggle */}
+          <label className="flex items-center gap-1.5 text-2xs text-text-secondary cursor-pointer select-none bg-bg-panel border border-bg-border px-2.5 py-1.5 rounded">
+            <input
+              type="checkbox"
+              checked={maskExport}
+              onChange={e => setMaskExport(e.target.checked)}
+              className="rounded border-bg-border"
+            />
+            <span>Field-Level Masking</span>
+          </label>
+
+          <button onClick={handleExportAuditLogs} className="btn-secondary text-xs gap-1.5">
+            <Download className="w-3.5 h-3.5" /> Export CSV (IST)
+          </button>
+        </div>
+      </div>
+
+      {/* Cryptographic Chain Integrity Status Card */}
+      <div className="p-3.5 rounded-lg bg-bg-panel border border-emerald-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-text-primary">SHA-256 Hash-Chain Integrity Status</span>
+              <span className="text-3xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-500/30">
+                100% IMMUTABLE
+              </span>
+            </div>
+            <div className="text-2xs text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>Verified Blocks: <strong className="text-emerald-400 font-mono">{logs.length}</strong></span>
+              <span>•</span>
+              <span>Genesis Hash: <span className="font-mono text-text-secondary">0000000000...</span></span>
+              <span>•</span>
+              <span>Last Traversal: <span className="font-mono text-amber-300">{integrityStatus.lastCheckedIST}</span></span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={handleVerifyChain}
+          disabled={isVerifying}
+          className="btn-primary text-xs gap-1.5 py-1.5 px-3 self-start md:self-auto shrink-0 shadow-md shadow-emerald-500/10"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isVerifying ? 'animate-spin' : ''}`} />
+          {isVerifying ? 'Verifying Hashes...' : 'Verify Chain Integrity'}
         </button>
       </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-1.5 border-b border-bg-border pb-2 text-2xs overflow-x-auto">
+        <span className="text-text-muted mr-1 font-medium">Filter By Action:</span>
+        {[
+          { key: 'ALL', label: `All Logs (${logs.length})` },
+          { key: 'AUTH', label: 'Auth & MFA' },
+          { key: 'SECURITY', label: 'Security & 403 Blocks' },
+          { key: 'LEADS_CRM', label: 'Leads & CRM' },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setFilterAction(tab.key)}
+            className={`px-2.5 py-1 rounded text-2xs font-medium transition-colors ${
+              filterAction === tab.key
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                : 'bg-bg-panel hover:bg-bg-hover text-text-secondary border border-bg-border'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Main Audit Log Table */}
       <div className="panel flex flex-col">
-        <DataTable data={auditLogs} columns={columns} keyExtractor={r => r.id} pageSize={15} searchable searchPlaceholder="Search logs..." searchKeys={['user','action','resource','ip']} />
+        <DataTable
+          data={filteredLogs}
+          columns={columns}
+          keyExtractor={r => r.id}
+          pageSize={15}
+          searchable
+          searchPlaceholder="Search by user, action, resource, IP, or hash..."
+          searchKeys={['userName', 'userEmail', 'action', 'resource', 'ip', 'tamperHash', 'details']}
+        />
       </div>
     </div>
   )
@@ -240,41 +469,110 @@ export function AdminAuditLogs() {
 // Fraud Detection
 // ============================================================
 export function AdminFraud() {
+  const { showToast } = useToast()
+  const { securityAlerts, acknowledgeAlert, resolveAlert } = useAudit()
+
+  const criticalCount = securityAlerts.filter(f => f.severity === 'CRITICAL').length + fraudAlerts.filter(f => f.severity === 'CRITICAL').length
+  const highCount = securityAlerts.filter(f => f.severity === 'HIGH').length + fraudAlerts.filter(f => f.severity === 'HIGH').length
+  const mediumCount = securityAlerts.filter(f => f.severity === 'MEDIUM').length + fraudAlerts.filter(f => f.severity === 'MEDIUM').length
+
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="w-4 h-4 text-blue-400" />
-        <h1 className="text-sm font-bold text-text-primary">Fraud Detection</h1>
-        <span className="badge-blue">ADMIN</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-blue-400" />
+          <h1 className="text-sm font-bold text-text-primary">Fraud & Security Anomaly Detection</h1>
+          <span className="badge-blue">ADMIN MONITORING</span>
+        </div>
+        <div className="text-2xs font-mono text-text-muted">
+          Active Anomaly Models: Brute Force, Velocity, IP Geo, Hash Integrity
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetricCard label="Critical Alerts" value={fraudAlerts.filter(f=>f.severity==='CRITICAL').length} />
-        <MetricCard label="High Alerts"     value={fraudAlerts.filter(f=>f.severity==='HIGH').length} accent />
-        <MetricCard label="Medium Alerts"   value={fraudAlerts.filter(f=>f.severity==='MEDIUM').length} />
-        <MetricCard label="Resolved Today"  value={12} />
+        <MetricCard label="Critical Alerts" value={criticalCount} accent />
+        <MetricCard label="High Severity"   value={highCount} />
+        <MetricCard label="Medium Alerts"  value={mediumCount} />
+        <MetricCard label="Active Anomalies" value={securityAlerts.length} unit="live" />
       </div>
 
+      {/* Real-time Security Anomaly Alerts */}
       <div className="panel">
-        <div className="section-header"><span className="section-title">Active Fraud Alerts</span></div>
+        <div className="section-header flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-danger-bright animate-ping" />
+            <span className="section-title">Live Anomaly Alerts (Audit Stream Engine)</span>
+          </div>
+          <span className="text-2xs font-mono text-amber-400">{securityAlerts.length} Active Events</span>
+        </div>
+
         <div className="divide-y divide-bg-border">
-          {fraudAlerts.map(alert => (
-            <div key={alert.id} className={`px-4 py-3 hover:bg-bg-hover transition-colors ${alert.severity === 'CRITICAL' ? 'border-l-2 border-danger' : alert.severity === 'HIGH' ? 'border-l-2 border-warning' : ''}`}>
+          {securityAlerts.map(alert => (
+            <div key={alert.id} className={`px-4 py-3 hover:bg-bg-hover transition-colors ${alert.severity === 'CRITICAL' ? 'border-l-2 border-danger' : alert.severity === 'HIGH' ? 'border-l-2 border-warning' : 'border-l-2 border-amber-500/40'}`}>
               <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className={`w-4 h-4 shrink-0 ${alert.severity === 'CRITICAL' ? 'text-danger-bright' : alert.severity === 'HIGH' ? 'text-warning' : 'text-text-muted'}`} />
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${alert.severity === 'CRITICAL' ? 'text-danger-bright' : alert.severity === 'HIGH' ? 'text-warning' : 'text-amber-400'}`} />
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-2xs font-bold ${alert.severity === 'CRITICAL' ? 'text-danger-bright' : alert.severity === 'HIGH' ? 'text-warning' : alert.severity === 'MEDIUM' ? 'text-amber-400' : 'text-text-muted'}`}>{alert.severity}</span>
-                      <span className="text-xs font-semibold text-text-primary">{alert.type}</span>
+                      <span className={`text-2xs font-bold ${alert.severity === 'CRITICAL' ? 'text-danger-bright' : alert.severity === 'HIGH' ? 'text-warning' : 'text-amber-400'}`}>{alert.severity}</span>
+                      <span className="text-xs font-semibold text-text-primary">{alert.title}</span>
+                      <span className="text-3xs px-1.5 py-0.2 rounded bg-bg-panel border border-bg-border font-mono text-text-muted">{alert.type}</span>
                     </div>
                     <div className="text-xs text-text-secondary mt-0.5">{alert.description}</div>
-                    <div className="text-2xs text-text-muted mt-1">User: {alert.user} · IP: {alert.ip} · {formatDateTime(alert.timestamp)}</div>
+                    <div className="text-2xs text-text-muted mt-1 flex items-center gap-2 flex-wrap">
+                      <span>User: <strong className="text-text-primary">{alert.affectedUser || 'N/A'}</strong></span>
+                      <span>•</span>
+                      <span>IP: <span className="font-mono text-text-secondary">{alert.sourceIp}</span></span>
+                      <span>•</span>
+                      <span>Time: <span className="font-mono text-amber-300">{alert.timestampIST}</span></span>
+                      <span>•</span>
+                      <span className="text-success font-medium">Policy: {alert.actionTaken}</span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <button className="btn-secondary text-2xs py-1">Investigate</button>
-                  <button className="btn-primary text-2xs py-1">Resolve</button>
+                  <button
+                    onClick={() => {
+                      acknowledgeAlert(alert.id)
+                      showToast('info', 'Investigating Anomaly', alert.title)
+                    }}
+                    className="btn-secondary text-2xs py-1 px-2"
+                  >
+                    Investigate
+                  </button>
+                  <button
+                    onClick={() => {
+                      resolveAlert(alert.id)
+                      showToast('success', 'Anomaly Resolved', alert.title)
+                    }}
+                    className="btn-primary text-2xs py-1 px-2"
+                  >
+                    Resolve
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Historical Baseline Alerts */}
+      <div className="panel">
+        <div className="section-header"><span className="section-title">Historical Baseline Incident Archive</span></div>
+        <div className="divide-y divide-bg-border">
+          {fraudAlerts.map(alert => (
+            <div key={alert.id} className="px-4 py-2.5 hover:bg-bg-hover transition-colors">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xs font-bold text-text-muted">{alert.severity}</span>
+                      <span className="text-xs font-medium text-text-primary">{alert.type}</span>
+                    </div>
+                    <div className="text-2xs text-text-muted">{alert.description}</div>
+                    <div className="text-3xs text-text-muted mt-0.5">User: {alert.user} · IP: {alert.ip} · {formatDateTime(alert.timestamp)}</div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { leads as defaultLeads, type Lead, type LeadStatus, type IntentLevel } from '@/data/leads'
 import type { DuplicateStrategy } from '@/lib/excelLeads'
 import { normalizePhoneNumber } from '@/lib/excelLeads'
+import { useAudit } from './AuditContext'
+import { useAuth } from './AuthContext'
 
 const STORAGE_KEY = 'callisto_ai_leads_v2'
 
@@ -46,6 +48,8 @@ const LeadContext = createContext<LeadContextValue | null>(null)
 
 export function LeadProvider({ children }: { children: React.ReactNode }) {
   const [leadsList, setLeadsList] = useState<Lead[]>(loadInitialLeads)
+  const { logAction } = useAudit()
+  const { user } = useAuth()
 
   // Persist to localStorage
   useEffect(() => {
@@ -164,9 +168,21 @@ export function LeadProvider({ children }: { children: React.ReactNode }) {
         return [...leadsToAppend, ...currentLeads]
       })
 
+      if (added > 0 || updated > 0) {
+        logAction({
+          userId: user?.id,
+          userName: user?.name,
+          userRole: user?.role,
+          action: 'LEADS_BATCH_IMPORT',
+          resource: 'Leads Directory',
+          status: 'SUCCESS',
+          details: `Imported ${added} new leads, updated ${updated}, skipped ${skipped} (Strategy: ${strategy}).`,
+        }).catch(() => {})
+      }
+
       return { added, updated, skipped }
     },
-    []
+    [user, logAction]
   )
 
   const updateLead = useCallback((id: string, updates: Partial<Lead>) => {
@@ -175,12 +191,32 @@ export function LeadProvider({ children }: { children: React.ReactNode }) {
         lead.id === id ? { ...lead, ...updates, lastActivity: new Date() } : lead
       )
     )
-  }, [])
+
+    logAction({
+      userId: user?.id,
+      userName: user?.name,
+      userRole: user?.role,
+      action: 'LEAD_FIELD_UPDATE',
+      resource: `Lead: ${id}`,
+      status: 'SUCCESS',
+      details: `Updated attributes: ${Object.keys(updates).join(', ')}`,
+    }).catch(() => {})
+  }, [user, logAction])
 
   const deleteLeads = useCallback((ids: string[]) => {
     const idSet = new Set(ids)
     setLeadsList(prev => prev.filter(lead => !idSet.has(lead.id)))
-  }, [])
+
+    logAction({
+      userId: user?.id,
+      userName: user?.name,
+      userRole: user?.role,
+      action: 'LEADS_DELETE_WRITE',
+      resource: `${ids.length} Leads`,
+      status: 'SUCCESS',
+      details: `Deleted ${ids.length} lead records from active repository.`,
+    }).catch(() => {})
+  }, [user, logAction])
 
   const getLead = useCallback(
     (id: string) => {

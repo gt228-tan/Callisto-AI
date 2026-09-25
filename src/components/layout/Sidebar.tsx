@@ -7,6 +7,7 @@ import {
   Sparkles, CheckCircle, X, Globe, Workflow
 } from 'lucide-react'
 import { useAppContext } from '@/contexts/AppContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
 
 interface NavDef {
@@ -49,6 +50,8 @@ const adminNavDefs: NavDef[] = [
 
 export function Sidebar() {
   const { sidebarCollapsed, setSidebarCollapsed, mobileNavOpen, setMobileNavOpen, t } = useAppContext()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
   const location = useLocation()
 
   return (
@@ -89,23 +92,26 @@ export function Sidebar() {
             />
           ))}
 
-          {/* Admin nav */}
-          <div className={cn('mt-3 pt-2 border-t border-bg-border')}>
-            {!sidebarCollapsed && (
-              <div className="px-3 py-1">
-                <span className="text-2xs uppercase tracking-widest text-blue-400/70 font-medium">{t('nav.admin', 'Admin')}</span>
-              </div>
-            )}
-            {adminNavDefs.map(item => (
-              <NavItemRow
-                key={item.to}
-                item={item}
-                label={t(item.labelKey)}
-                collapsed={sidebarCollapsed}
-                currentPath={location.pathname}
-              />
-            ))}
-          </div>
+          {/* Admin nav — Restricted to ADMIN role per Zero-Trust RBAC */}
+          {isAdmin && (
+            <div className={cn('mt-3 pt-2 border-t border-bg-border')}>
+              {!sidebarCollapsed && (
+                <div className="px-3 py-1 flex items-center justify-between">
+                  <span className="text-2xs uppercase tracking-widest text-blue-400/70 font-medium">{t('nav.admin', 'Admin')}</span>
+                  <span className="text-3xs font-mono px-1 py-0.2 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">ROOT</span>
+                </div>
+              )}
+              {adminNavDefs.map(item => (
+                <NavItemRow
+                  key={item.to}
+                  item={item}
+                  label={t(item.labelKey)}
+                  collapsed={sidebarCollapsed}
+                  currentPath={location.pathname}
+                />
+              ))}
+            </div>
+          )}
         </nav>
 
         {/* Collapse toggle */}
@@ -166,32 +172,36 @@ export function Sidebar() {
                 />
               ))}
 
-              <div className="mt-4 pt-3 border-t border-bg-border">
-                <div className="px-3 py-1 mb-1">
-                  <span className="text-2xs uppercase tracking-widest text-blue-400 font-semibold">{t('nav.admin', 'Admin')}</span>
+              {/* Admin nav in mobile drawer */}
+              {isAdmin && (
+                <div className="mt-4 pt-3 border-t border-bg-border">
+                  <div className="px-3 py-1 mb-1 flex items-center justify-between">
+                    <span className="text-2xs uppercase tracking-widest text-blue-400 font-semibold">{t('nav.admin', 'Admin')}</span>
+                    <span className="text-3xs font-mono px-1 py-0.2 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">ROOT</span>
+                  </div>
+                  {adminNavDefs.map(item => (
+                    <NavItemRow
+                      key={item.to}
+                      item={item}
+                      label={t(item.labelKey)}
+                      collapsed={false}
+                      currentPath={location.pathname}
+                      onItemClick={() => setMobileNavOpen(false)}
+                    />
+                  ))}
                 </div>
-                {adminNavDefs.map(item => (
-                  <NavItemRow
-                    key={item.to}
-                    item={item}
-                    label={t(item.labelKey)}
-                    collapsed={false}
-                    currentPath={location.pathname}
-                    onItemClick={() => setMobileNavOpen(false)}
-                  />
-                ))}
-              </div>
+              )}
             </nav>
 
             {/* User Info Card in Drawer */}
             <div className="p-3 border-t border-bg-border bg-bg-card/50">
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xs font-bold text-amber-400 shrink-0">
-                  TM
+                  {user?.name ? user.name.slice(0, 2).toUpperCase() : 'TM'}
                 </div>
                 <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-xs font-semibold text-text-primary truncate">Tanishq Mehta</span>
-                  <span className="text-2xs text-text-muted truncate">Admin · Enterprise</span>
+                  <span className="text-xs font-semibold text-text-primary truncate">{user?.name || 'Tanishq Mehta'}</span>
+                  <span className="text-2xs text-text-muted truncate">{user?.role || 'Admin'} · Zero-Trust RBAC</span>
                 </div>
               </div>
             </div>

@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { campaigns as initialCampaigns, type Campaign } from '@/data/campaigns'
+import { useAudit } from './AuditContext'
+import { useAuth } from './AuthContext'
 
 const STORAGE_KEY = 'callisto_ai_campaigns'
 
@@ -40,6 +42,8 @@ const CampaignContext = createContext<CampaignContextValue | null>(null)
 
 export function CampaignProvider({ children }: { children: React.ReactNode }) {
   const [campaignList, setCampaignList] = useState<Campaign[]>(loadInitialCampaigns)
+  const { logAction } = useAudit()
+  const { user } = useAuth()
 
   useEffect(() => {
     try {
@@ -78,19 +82,55 @@ export function CampaignProvider({ children }: { children: React.ReactNode }) {
     }
 
     setCampaignList(prev => [newCamp, ...prev])
+
+    logAction({
+      userId: user?.id,
+      userName: user?.name,
+      userRole: user?.role,
+      action: 'CAMPAIGN_CREATE_WRITE',
+      resource: `Campaign: ${newCamp.name}`,
+      status: 'SUCCESS',
+      details: `Created campaign ${newCamp.id} with ${newCamp.leads} target prospects (Voice: ${newCamp.voice}, Language: ${newCamp.language}).`,
+    }).catch(() => {})
+
     return newCamp
   }
 
   function togglePause(id: string) {
+    let nextStatus = 'PAUSED'
     setCampaignList(prev =>
-      prev.map(c =>
-        c.id === id ? { ...c, status: c.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' } : c
-      )
+      prev.map(c => {
+        if (c.id === id) {
+          nextStatus = c.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE'
+          return { ...c, status: nextStatus as any }
+        }
+        return c
+      })
     )
+
+    logAction({
+      userId: user?.id,
+      userName: user?.name,
+      userRole: user?.role,
+      action: 'CAMPAIGN_STATUS_TOGGLE',
+      resource: `Campaign: ${id}`,
+      status: 'SUCCESS',
+      details: `Campaign status changed to ${nextStatus}.`,
+    }).catch(() => {})
   }
 
   function deleteCampaign(id: string) {
     setCampaignList(prev => prev.filter(c => c.id !== id))
+
+    logAction({
+      userId: user?.id,
+      userName: user?.name,
+      userRole: user?.role,
+      action: 'CAMPAIGN_DELETE_WRITE',
+      resource: `Campaign: ${id}`,
+      status: 'SUCCESS',
+      details: `Campaign deleted by user.`,
+    }).catch(() => {})
   }
 
   function updateCampaign(id: string, updates: Partial<Campaign>) {
