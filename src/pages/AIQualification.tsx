@@ -79,13 +79,21 @@ export function AIQualification() {
   ]
 
   return (
-    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-amber-400 shrink-0" />
-          <h1 className="text-sm font-bold text-text-primary">AI Qualification</h1>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-bg-border/60">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <Brain className="w-4 h-4" />
+          </div>
+          <div>
+            <h1 className="text-base sm:text-lg font-bold text-text-primary tracking-tight">AI BANT Lead Qualification</h1>
+            <p className="text-2xs text-text-muted font-mono hidden sm:block">Predictive scoring for Budget, Authority, Need clarity & Timeline fit</p>
+          </div>
         </div>
-        <button onClick={() => showToast('info', 'Bulk Qualify Running', 'Qualifying all unqualified leads...')} className="btn-primary text-xs w-full sm:w-auto justify-center">
+        <button
+          onClick={() => showToast('info', 'Bulk Qualify Running', 'Qualifying all unqualified leads...')}
+          className="btn-primary text-xs py-2 px-3.5 w-full sm:w-auto justify-center font-semibold shadow-md shadow-amber-500/20"
+        >
           <Play className="w-3.5 h-3.5" /> Run Bulk Qualification
         </button>
       </div>

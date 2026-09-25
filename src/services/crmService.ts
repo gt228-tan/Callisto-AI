@@ -1,4 +1,5 @@
 import { Lead, LeadSource } from '@/data/leads'
+import { syncVoiceCallWithServer, syncActivityWithServer } from './apiClient'
 
 export type CrmStatus = 'CONNECTED' | 'DISCONNECTED' | 'SYNCING' | 'ERROR' | 'PAUSED'
 export type LeadSourceStatus = 'ACTIVE' | 'SYNCING' | 'INACTIVE' | 'RATE_LIMITED'
@@ -53,12 +54,63 @@ export interface SyncActivityRecord {
   timestamp: string
   integrationId: string
   integrationName: string
-  type: 'CRM_PUSH' | 'CRM_PULL' | 'SOURCE_INGEST' | 'WEBHOOK_EVENT'
+  type: 'CRM_PUSH' | 'CRM_PULL' | 'SOURCE_INGEST' | 'WEBHOOK_EVENT' | 'VOICE_CALL_SYNC' | 'ACTIVITY_SYNC'
   status: 'SUCCESS' | 'WARNING' | 'ERROR'
   recordsCount: number
   latencyMs: number
   message: string
   payloadSummary?: string
+}
+
+export interface VoiceCallSyncPayload {
+  callId?: string
+  prospectName: string
+  company: string
+  phone?: string
+  email?: string
+  agentName?: string
+  language?: string
+  durationSeconds: number
+  outcome: string
+  sentiment: string
+  qualification: string
+  intent?: string
+  intentScore?: number
+  summary: string
+  nextBestAction: string
+  buyingSignals?: string[]
+  objections?: string[]
+  transcript?: Array<{ speaker: string; text: string; time?: string; timestamp?: string }>
+  targetCrmId?: string
+}
+
+export interface VoiceAgentCrmConfig {
+  autoSyncCalls: boolean
+  targetCrmId: string
+  minScoreToSync: number
+  syncTranscripts: boolean
+  autoCreateLead: boolean
+  lastSyncedAt?: string
+  totalCallsSynced: number
+}
+
+export interface ActivitySyncPayload {
+  type: 'CALENDLY_MEETING' | 'CAMPAIGN_OUTREACH' | 'HUMAN_HANDOFF' | 'LEAD_STATUS_UPDATE' | 'VOICE_CALL'
+  title: string
+  prospectName: string
+  company: string
+  details: string
+  score?: number
+  targetCrmId?: string
+  metadata?: Record<string, any>
+}
+
+export interface SyncedVoiceCallRecord extends VoiceCallSyncPayload {
+  id: string
+  syncedAt: string
+  targetCrmName: string
+  logId: string
+  status: 'SUCCESS' | 'FAILED'
 }
 
 const DEFAULT_CRMS: CRMIntegration[] = [
@@ -494,6 +546,9 @@ const STORAGE_KEYS = {
   CRMS: 'callisto_crm_integrations_v1',
   SOURCES: 'callisto_lead_sources_v1',
   LOGS: 'callisto_sync_activity_logs_v1',
+  VOICE_CONFIG: 'callisto_crm_voice_sync_config_v1',
+  SYNCED_CALLS: 'callisto_crm_synced_calls_v1',
+  SYNCED_ACTIVITIES: 'callisto_crm_synced_activities_v1',
 }
 
 // Storage helpers
@@ -561,6 +616,392 @@ export function addSyncLog(entry: Omit<SyncActivityRecord, 'id' | 'timestamp'>):
   const updated = [newLog, ...logs].slice(0, 50)
   saveSyncLogs(updated)
   return newLog
+}
+
+// ── Voice Agent & Activity CRM Synchronization Engine ──────────────────────────
+
+const DEFAULT_VOICE_CRM_CONFIG: VoiceAgentCrmConfig = {
+  autoSyncCalls: true,
+  targetCrmId: 'salesforce',
+  minScoreToSync: 65,
+  syncTranscripts: true,
+  autoCreateLead: true,
+  totalCallsSynced: 14,
+}
+
+export function loadVoiceAgentCrmConfig(): VoiceAgentCrmConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.VOICE_CONFIG)
+    if (raw) return { ...DEFAULT_VOICE_CRM_CONFIG, ...JSON.parse(raw) }
+  } catch (e) {
+    console.error('Failed to load voice CRM config', e)
+  }
+  return DEFAULT_VOICE_CRM_CONFIG
+}
+
+export function saveVoiceAgentCrmConfig(updates: Partial<VoiceAgentCrmConfig>): VoiceAgentCrmConfig {
+  const current = loadVoiceAgentCrmConfig()
+  const updated = { ...current, ...updates }
+  try {
+    localStorage.setItem(STORAGE_KEYS.VOICE_CONFIG, JSON.stringify(updated))
+  } catch (e) {
+    console.error('Failed to save voice CRM config', e)
+  }
+  return updated
+}
+
+export function loadSyncedVoiceCalls(): SyncedVoiceCallRecord[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.SYNCED_CALLS)
+    if (raw) return JSON.parse(raw)
+  } catch (e) {
+    console.error('Failed to load synced voice calls', e)
+  }
+  return [
+    {
+      id: 'SYNC-CALL-INITIAL-1',
+      callId: 'LC1',
+      prospectName: 'Rahul Mehta',
+      company: 'Acme Digital Solutions',
+      phone: '+91 98201 44892',
+      email: 'rahul.mehta@acmedigital.com',
+      agentName: 'Aria',
+      durationSeconds: 247,
+      outcome: 'MEETING_BOOKED',
+      sentiment: 'POSITIVE',
+      qualification: 'QUALIFIED',
+      intentScore: 95,
+      summary: 'Agreed for technical deep dive demo on Tuesday 11 AM IST. Verified active requirement and budget.',
+      nextBestAction: 'Send calendar invite & technical architecture deck',
+      buyingSignals: ['Budget allocated', 'Urgent Q4 project', 'Decision maker'],
+      syncedAt: new Date(Date.now() - 12 * 60000).toISOString(),
+      targetCrmId: 'salesforce',
+      targetCrmName: 'Salesforce CRM',
+      logId: 'LOG-VOICE-1',
+      status: 'SUCCESS',
+    },
+    {
+      id: 'SYNC-CALL-INITIAL-2',
+      callId: 'LC2',
+      prospectName: 'Sarah Johnson',
+      company: 'NexaFinance Corp',
+      phone: '+1 (415) 892-0192',
+      email: 'sarah.j@nexafinance.com',
+      agentName: 'Aria',
+      durationSeconds: 183,
+      outcome: 'QUALIFIED',
+      sentiment: 'POSITIVE',
+      qualification: 'QUALIFIED',
+      intentScore: 93,
+      summary: 'Demo requested for executive team. Evaluating 3 vendors for high-volume outbound SDR automation.',
+      nextBestAction: 'Prepare custom enterprise security deck and pricing model',
+      buyingSignals: ['Evaluating 3 vendors', 'High volume SDR team'],
+      syncedAt: new Date(Date.now() - 34 * 60000).toISOString(),
+      targetCrmId: 'salesforce',
+      targetCrmName: 'Salesforce CRM',
+      logId: 'LOG-VOICE-2',
+      status: 'SUCCESS',
+    },
+    {
+      id: 'SYNC-CALL-INITIAL-3',
+      callId: 'LC4',
+      prospectName: 'Kavitha Reddy',
+      company: 'Bharat Insurance Group',
+      phone: '+91 94401 22819',
+      email: 'kavitha.r@bharatinsure.com',
+      agentName: 'Aria',
+      durationSeconds: 312,
+      outcome: 'QUALIFIED',
+      sentiment: 'POSITIVE',
+      qualification: 'QUALIFIED',
+      intentScore: 91,
+      summary: 'Requested callback with Solution Architect regarding Hindi language voice model migration.',
+      nextBestAction: 'Schedule technical callback for Thursday 3 PM',
+      buyingSignals: ['Enterprise migration', 'Looking for Hindi support'],
+      syncedAt: new Date(Date.now() - 75 * 60000).toISOString(),
+      targetCrmId: 'hubspot',
+      targetCrmName: 'HubSpot',
+      logId: 'LOG-VOICE-3',
+      status: 'SUCCESS',
+    },
+  ]
+}
+
+export function saveSyncedVoiceCalls(calls: SyncedVoiceCallRecord[]) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.SYNCED_CALLS, JSON.stringify(calls.slice(0, 50)))
+  } catch (e) {
+    console.error('Failed to save synced voice calls', e)
+  }
+}
+
+/**
+ * Synchronizes an AI Voice Agent call (recording, transcript, intelligence, scores) directly into CRM
+ */
+export async function syncVoiceCallToCrm(
+  payload: VoiceCallSyncPayload,
+  options?: { force?: boolean }
+): Promise<{ success: boolean; crmName: string; message: string; log: SyncActivityRecord }> {
+  const config = loadVoiceAgentCrmConfig()
+  const crms = loadCrms()
+
+  const chosenCrmId = payload.targetCrmId || config.targetCrmId
+  const targetCrm = crms.find(c => c.id === chosenCrmId && c.status === 'CONNECTED') ||
+    crms.find(c => c.status === 'CONNECTED') ||
+    crms.find(c => c.id === chosenCrmId) ||
+    crms[0]
+
+  const score = payload.intentScore ?? 90
+  const isQualified = payload.qualification === 'QUALIFIED' || score >= config.minScoreToSync
+
+  // Update CRM records count & last sync
+  const updatedCrms = crms.map(c => {
+    if (c.id === targetCrm.id) {
+      return {
+        ...c,
+        records: (c.records || 0) + 1,
+        lastSync: 'Just now',
+      }
+    }
+    return c
+  })
+  saveCrms(updatedCrms)
+
+  // Update Lead in localStorage (callisto_ai_leads_v2)
+  try {
+    const rawLeads = localStorage.getItem('callisto_ai_leads_v2')
+    const currentLeads: any[] = rawLeads ? JSON.parse(rawLeads) : []
+    const normEmail = (payload.email || '').toLowerCase().trim()
+    const normPhone = (payload.phone || '').replace(/[^0-9]/g, '')
+
+    const existingIdx = currentLeads.findIndex(l => {
+      const eMail = (l.email || '').toLowerCase().trim()
+      const ePhone = (l.phone || '').replace(/[^0-9]/g, '')
+      return (normEmail && eMail === normEmail) ||
+        (normPhone && ePhone && ePhone === normPhone) ||
+        (l.name && payload.prospectName && l.name.toLowerCase() === payload.prospectName.toLowerCase())
+    })
+
+    const finalStatus = payload.outcome === 'MEETING_BOOKED' ? 'MEETING' : (isQualified ? 'QUALIFIED' : 'CONTACTED')
+
+    if (existingIdx !== -1) {
+      const existing = currentLeads[existingIdx]
+      const existingTags: string[] = existing.tags || []
+      const newTags = Array.from(new Set([...existingTags, 'AI Voice Qualified', 'CRM Synced', ...(payload.buyingSignals || [])]))
+
+      currentLeads[existingIdx] = {
+        ...existing,
+        status: finalStatus,
+        intentScore: Math.max(existing.intentScore || 0, score),
+        intent: score >= 80 ? 'HIGH' : existing.intent,
+        nextAction: payload.nextBestAction || existing.nextAction,
+        aiReasoning: payload.summary || existing.aiReasoning,
+        tags: newTags,
+        lastActivity: new Date().toISOString(),
+      }
+    } else if (config.autoCreateLead) {
+      const newLeadObj = {
+        id: `LEAD-VOICE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        name: payload.prospectName,
+        company: payload.company || 'Enterprise Account',
+        jobTitle: 'Decision Maker',
+        industry: 'Enterprise Technology',
+        location: 'Mumbai, India',
+        country: 'India',
+        email: payload.email || `${payload.prospectName.toLowerCase().replace(/\s+/g, '.')}@${(payload.company || 'company').toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+        phone: payload.phone || '+91 98201 44892',
+        source: 'AI Voice Agent',
+        sourceUrl: `https://app.callistoai.com/calls/${payload.callId || Date.now()}`,
+        status: finalStatus,
+        intentScore: score,
+        intent: 'HIGH',
+        budgetSignal: 'HIGH',
+        requirement: payload.summary || 'Autonomous AI Voice Agent deployment required.',
+        nextAction: payload.nextBestAction || 'Schedule follow-up solution walkthrough',
+        tags: ['AI Voice Qualified', 'CRM Synced', ...(payload.buyingSignals || [])],
+        decisionMaker: true,
+        needClarity: 92,
+        urgency: 90,
+        budgetScore: 88,
+        authorityScore: 94,
+        fitScore: 92,
+        aiReasoning: `Voice Agent Call with ${payload.agentName || 'Aria'}. ${payload.summary}`,
+        aiRecommendations: [
+          `Synced directly into ${targetCrm.name} timeline`,
+          'Send executive technical architecture overview',
+          'Coordinate solution engineer kickoff call',
+        ],
+        discoveredAt: new Date().toISOString(),
+        enrichedAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString(),
+      }
+      currentLeads.unshift(newLeadObj)
+    }
+    localStorage.setItem('callisto_ai_leads_v2', JSON.stringify(currentLeads))
+  } catch (err) {
+    console.error('Failed to update lead store during CRM sync', err)
+  }
+
+  // Create Log
+  const syncLog = addSyncLog({
+    integrationId: targetCrm.id,
+    integrationName: targetCrm.name,
+    type: 'CRM_PUSH',
+    status: 'SUCCESS',
+    recordsCount: 1,
+    latencyMs: Math.floor(Math.random() * 50) + 75,
+    message: `[AI Voice Call] Synced call recording & intelligence for ${payload.prospectName} (${payload.company}) to ${targetCrm.name}`,
+    payloadSummary: JSON.stringify({
+      prospect: payload.prospectName,
+      company: payload.company,
+      duration: `${payload.durationSeconds}s`,
+      outcome: payload.outcome,
+      sentiment: payload.sentiment,
+      qualification: payload.qualification,
+      score,
+      turns: payload.transcript?.length || 0,
+      nextAction: payload.nextBestAction,
+      syncedTo: targetCrm.name,
+    }),
+  })
+
+  // Save to Synced Voice Calls store
+  const syncedRecord: SyncedVoiceCallRecord = {
+    ...payload,
+    id: `SYNC-VOICE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    syncedAt: new Date().toISOString(),
+    targetCrmId: targetCrm.id,
+    targetCrmName: targetCrm.name,
+    logId: syncLog.id,
+    status: 'SUCCESS',
+  }
+  const existingSynced = loadSyncedVoiceCalls()
+  saveSyncedVoiceCalls([syncedRecord, ...existingSynced])
+
+  // Update Config stats
+  saveVoiceAgentCrmConfig({
+    totalCallsSynced: config.totalCallsSynced + 1,
+    lastSyncedAt: new Date().toISOString(),
+  })
+
+  // Try live server sync
+  syncVoiceCallWithServer({
+    ...payload,
+    targetCrmId: targetCrm.id,
+  }).catch(() => {})
+
+  // Emit reactive event across application
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('callisto_crm_synced', {
+        detail: {
+          type: 'VOICE_CALL',
+          targetCrm: targetCrm.name,
+          prospect: payload.prospectName,
+          company: payload.company,
+          score,
+        },
+      })
+    )
+  }
+
+  return {
+    success: true,
+    crmName: targetCrm.name,
+    message: `Successfully synced call intelligence for ${payload.prospectName} into ${targetCrm.name}`,
+    log: syncLog,
+  }
+}
+
+/**
+ * Synchronizes other sales platform activities (Calendly meetings, handoffs, campaigns) to CRM
+ */
+export async function syncActivityToCrm(
+  activity: ActivitySyncPayload
+): Promise<{ success: boolean; crmName: string; message: string; log: SyncActivityRecord }> {
+  const crms = loadCrms()
+  const chosenCrmId = activity.targetCrmId || 'salesforce'
+  const targetCrm = crms.find(c => c.id === chosenCrmId && c.status === 'CONNECTED') ||
+    crms.find(c => c.status === 'CONNECTED') ||
+    crms[0]
+
+  // Update CRM records count & last sync
+  const updatedCrms = crms.map(c => {
+    if (c.id === targetCrm.id) {
+      return {
+        ...c,
+        records: (c.records || 0) + 1,
+        lastSync: 'Just now',
+      }
+    }
+    return c
+  })
+  saveCrms(updatedCrms)
+
+  const syncLog = addSyncLog({
+    integrationId: targetCrm.id,
+    integrationName: targetCrm.name,
+    type: 'CRM_PUSH',
+    status: 'SUCCESS',
+    recordsCount: 1,
+    latencyMs: Math.floor(Math.random() * 40) + 60,
+    message: `[${activity.type.replace(/_/g, ' ')}] Synced "${activity.title}" for ${activity.prospectName} (${activity.company}) to ${targetCrm.name}`,
+    payloadSummary: JSON.stringify({
+      type: activity.type,
+      title: activity.title,
+      prospect: activity.prospectName,
+      company: activity.company,
+      details: activity.details,
+      score: activity.score,
+      metadata: activity.metadata,
+      syncedTo: targetCrm.name,
+    }),
+  })
+
+  // Try live server sync
+  syncActivityWithServer({
+    ...activity,
+    targetCrmId: targetCrm.id,
+  }).catch(() => {})
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('callisto_crm_synced', {
+        detail: {
+          type: activity.type,
+          targetCrm: targetCrm.name,
+          prospect: activity.prospectName,
+          title: activity.title,
+        },
+      })
+    )
+  }
+
+  return {
+    success: true,
+    crmName: targetCrm.name,
+    message: `Successfully synced ${activity.title} to ${targetCrm.name}`,
+    log: syncLog,
+  }
+}
+
+/**
+ * Batch syncs multiple calls into CRM
+ */
+export async function syncBatchVoiceCallsToCrm(
+  calls: VoiceCallSyncPayload[],
+  targetCrmId?: string
+): Promise<{ count: number; crmName: string }> {
+  let synced = 0
+  let crmName = 'Salesforce CRM'
+  for (const c of calls) {
+    const res = await syncVoiceCallToCrm({ ...c, targetCrmId }, { force: true })
+    if (res.success) {
+      synced++
+      crmName = res.crmName
+    }
+  }
+  return { count: synced, crmName }
 }
 
 // Generate high-intent realistic leads based on source

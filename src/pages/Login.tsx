@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react'
 import {
-  Shield, KeyRound, Lock, Sparkles, CheckCircle, AlertTriangle,
+  Shield, KeyRound, Lock, CheckCircle, AlertTriangle,
   ArrowRight, RefreshCw, Smartphone, Eye, EyeOff, Check, AlertCircle,
-  FileCheck, Globe, Activity, Terminal
+  FileCheck, Globe, Activity, Terminal, Radio, Orbit
 } from 'lucide-react'
 import { useAuth, PRESET_USERS } from '@/contexts/AuthContext'
 import { ROLE_PRIVILEGES, type UserRole, formatISTDateTime } from '@/lib/security'
 import { useToast } from '@/contexts/ToastContext'
+import { CallistoLogo } from '@/components/ui/CallistoLogo'
 
-export function Login() {
+interface LoginProps {
+  onReplayPreloader?: () => void
+}
+
+export function Login({ onReplayPreloader }: LoginProps = {}) {
   const {
     login,
     verifyOtp,
@@ -97,29 +102,34 @@ export function Login() {
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary flex flex-col justify-between relative overflow-hidden select-none">
       {/* Background Decorative Gradients */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Top Header Bar */}
-      <header className="h-14 border-b border-bg-border/60 bg-bg-secondary/70 backdrop-blur px-4 sm:px-8 flex items-center justify-between z-10">
+      <header className="h-14 border-b border-bg-border/80 bg-bg-secondary/80 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-between z-10 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded bg-amber-500/20 border border-amber-500/40 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-          </div>
-          <div>
-            <div className="text-xs font-bold text-text-primary tracking-wide">Callisto AI</div>
-            <div className="text-3xs text-text-muted">Zero-Trust Sales & Voice Intelligence Platform</div>
-          </div>
+          <CallistoLogo size={32} showText={true} subtitle="Zero-Trust Mission Control" />
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4 text-2xs text-text-muted">
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-bg-panel border border-bg-border">
-            <Lock className="w-3 h-3 text-success" />
-            <span className="font-mono text-text-secondary">TLS 1.3 / AES-256</span>
+        <div className="flex items-center gap-2 sm:gap-4 text-xs text-slate-400">
+          {onReplayPreloader && (
+            <button
+              type="button"
+              onClick={onReplayPreloader}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 transition-all font-mono text-2xs hover:scale-105 active:scale-95 shadow-sm"
+              title="Launch 5-Second NASA Callisto Moon Preloader Sequence"
+            >
+              <Orbit className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
+              <span>Callisto Moon Recon</span>
+            </button>
+          )}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-panel/80 border border-bg-border">
+            <Lock className="w-3 h-3 text-emerald-400" />
+            <span className="font-mono text-slate-300">TLS 1.3 / AES-256</span>
           </div>
-          <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded bg-bg-panel border border-bg-border">
-            <Activity className="w-3 h-3 text-amber-400" />
-            <span className="font-mono text-text-secondary">IST Sync: {formatISTDateTime(new Date()).split(',')[1]?.trim()}</span>
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-panel/80 border border-bg-border">
+            <Radio className="w-3 h-3 text-sky-400 animate-pulse" />
+            <span className="font-mono text-slate-300">IST: {formatISTDateTime(new Date()).split(',')[1]?.trim()}</span>
           </div>
         </div>
       </header>
@@ -429,8 +439,19 @@ export function Login() {
           <Terminal className="w-3 h-3 text-amber-400" />
           <span>Callisto AI Enterprise Security Engine · ISO 27001 & SOC-2 Compliant</span>
         </div>
-        <div>
-          Session Inactivity Timeout: <span className="font-mono text-text-secondary">15 Minutes (Active)</span>
+        <div className="flex items-center gap-3">
+          <a
+            href="https://science.nasa.gov/jupiter/jupiter-moons/callisto/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 font-mono transition-colors"
+          >
+            NASA Science: Callisto Moon ↗
+          </a>
+          <span className="hidden sm:inline text-slate-600">•</span>
+          <div className="hidden sm:inline">
+            Session Inactivity Timeout: <span className="font-mono text-text-secondary">15 Minutes (Active)</span>
+          </div>
         </div>
       </footer>
     </div>

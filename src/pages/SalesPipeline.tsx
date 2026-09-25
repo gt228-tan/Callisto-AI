@@ -68,16 +68,21 @@ export function SalesPipeline() {
   }
 
   return (
-    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Kanban className="w-4 h-4 text-amber-400 shrink-0" />
-          <h1 className="text-sm font-bold text-text-primary">Sales Pipeline</h1>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-bg-border/60">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <Kanban className="w-4 h-4" />
+          </div>
+          <div>
+            <h1 className="text-base sm:text-lg font-bold text-text-primary tracking-tight">Sales Pipeline</h1>
+            <p className="text-2xs text-text-muted font-mono hidden sm:block">Visual stage velocity, kanban drag-and-drop & deal momentum</p>
+          </div>
         </div>
         <div className="flex items-center gap-2 text-xs">
           <DollarSign className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span className="text-text-muted">Pipeline Value:</span>
-          <span className="font-bold font-mono text-amber-400">₹{(totalValue / 100000).toFixed(0)}L</span>
+          <span className="text-text-muted font-medium">Pipeline Value:</span>
+          <span className="font-bold font-mono text-amber-400 text-sm">₹{(totalValue / 100000).toFixed(0)}L</span>
         </div>
       </div>
 

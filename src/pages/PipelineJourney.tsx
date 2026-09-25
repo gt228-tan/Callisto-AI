@@ -153,33 +153,35 @@ export function PipelineJourney() {
   }, [])
 
   return (
-    <div className="p-3 sm:p-4 space-y-4 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-bg-border/60">
         <div>
-          <div className="flex items-center gap-2">
-            <Workflow className="w-4 h-4 text-amber-400 shrink-0" />
-            <h1 className="text-sm font-bold text-text-primary">
+          <div className="flex items-center gap-2.5">
+            <Workflow className="w-5 h-5 text-sky-400 shrink-0" />
+            <h1 className="text-lg font-bold text-slate-100 tracking-wide font-sans">
               Autonomous Sales Pipeline Journey (9-Stage Engine)
             </h1>
-            <span className="badge-success text-2xs animate-pulse">AUTONOMOUS</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold uppercase animate-pulse">
+              AUTONOMOUS ENGINE
+            </span>
           </div>
-          <p className="text-2xs text-text-muted mt-0.5">
-            Understand Business → Discover Requirements & Leads → Enrich → Qualify → AI Call → Capture Response → Transcript & Insights → Identify Interested Prospects → Enable Follow-up
+          <p className="text-xs text-slate-400 font-mono mt-1">
+            Orbital trajectory: Understand ICP → Discover → Enrich → Qualify → Multilingual AI Call → Live FAQs → Insights → Highlight Lead → Follow-up
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <button
             onClick={handleAutoPlayToggle}
-            className={`btn-primary text-xs gap-1.5 py-1.5 ${isPlayingAuto ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
+            className={`btn-primary text-xs py-2 px-3.5 gap-2 font-sans ${isPlayingAuto ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
           >
             {isPlayingAuto ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
             {isPlayingAuto ? 'Pause Simulation' : 'Run Full Autonomous Pipeline'}
           </button>
           <button
             onClick={() => { setActiveStep(1); setIsPlayingAuto(false) }}
-            className="btn-secondary text-xs gap-1 p-2"
+            className="btn-secondary text-xs p-2 text-slate-400 hover:text-slate-100"
             title="Reset to Step 1"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -188,33 +190,35 @@ export function PipelineJourney() {
       </div>
 
       {/* Dual Pathway Banner: Discovery vs AI Calling Only */}
-      <div className="p-3 bg-bg-card border border-amber-500/30 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-2xs animate-fade-in">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-            <PhoneCall className="w-4 h-4" />
+      <div className="panel p-4 sm:p-5 bg-gradient-to-r from-sky-500/10 via-bg-card to-amber-500/5 border border-sky-500/25 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+            <PhoneCall className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-text-primary">Have Your Own Prospect List?</span>
-              <span className="badge-amber font-mono text-3xs font-semibold">AI Calling Only Mode</span>
+              <span className="text-xs font-bold text-slate-100">Have Your Own Prospect List?</span>
+              <span className="text-[10px] font-mono px-2 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                AI Calling Direct Mode
+              </span>
             </div>
-            <span className="text-text-muted">
-              Users can upload their own leads via CSV/Excel and skip AI web discovery, jumping straight to Stage 5: Multilingual Voice Outreach.
-            </span>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Upload leads via CSV/Excel and skip web discovery, routing directly to Stage 5: Multilingual Voice Outreach.
+            </p>
           </div>
         </div>
         <button
           onClick={() => navigate('/campaigns')}
-          className="btn-secondary text-2xs py-1.5 px-3 border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 whitespace-nowrap self-start md:self-auto flex items-center gap-1.5"
+          className="btn-secondary text-xs py-2 px-3.5 text-amber-300 border-amber-500/30 hover:bg-amber-500/10 whitespace-nowrap self-start md:self-auto flex items-center gap-1.5 shrink-0 font-mono"
         >
-          <PhoneCall className="w-3 h-3" />
-          <span>🚀 AI Calling Only Campaign</span>
+          <PhoneCall className="w-3.5 h-3.5" />
+          <span>Launch AI Calling Campaign</span>
         </button>
       </div>
 
-      {/* Stepper Navigation Bar */}
-      <div className="panel p-2.5 overflow-x-auto scrollbar-thin">
-        <div className="flex items-center gap-1.5 min-w-[720px]">
+      {/* Stepper Navigation Bar — Callisto Orbital Nodes */}
+      <div className="panel p-3.5 overflow-x-auto scrollbar-thin touch-pan-x">
+        <div className="flex items-center gap-2.5 min-w-[850px]">
           {pipelineSteps.map(step => {
             const Icon = step.icon
             const isCurrent = activeStep === step.number
@@ -224,26 +228,28 @@ export function PipelineJourney() {
               <button
                 key={step.id}
                 onClick={() => setActiveStep(step.number)}
-                className={`flex-1 flex items-center gap-2 p-2 rounded text-left transition-all border ${
+                className={`flex-1 flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all border ${
                   isCurrent
-                    ? 'bg-amber-500/15 border-amber-500/60 text-amber-400'
+                    ? 'bg-sky-500/15 border-sky-500/60 text-sky-300 shadow-[0_0_15px_rgba(56,189,248,0.15)] ring-1 ring-sky-500/40'
                     : isDone
-                    ? 'bg-bg-card border-success/30 text-success'
-                    : 'bg-bg-secondary border-bg-border text-text-muted hover:border-bg-hover'
+                    ? 'bg-bg-card/80 border-emerald-500/30 text-emerald-300'
+                    : 'bg-bg-secondary/60 border-bg-border/70 text-slate-400 hover:border-sky-500/30'
                 }`}
               >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-2xs font-bold shrink-0 ${
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-mono font-bold shrink-0 transition-transform ${
                   isCurrent
-                    ? 'bg-amber-500 text-black'
+                    ? 'bg-sky-400 text-black shadow-md scale-105'
                     : isDone
-                    ? 'bg-success text-black'
-                    : 'bg-bg-border text-text-muted'
+                    ? 'bg-emerald-400 text-black'
+                    : 'bg-bg-panel border border-slate-700 text-slate-400'
                 }`}>
-                  {isDone ? <Check className="w-3 h-3" /> : step.number}
+                  {isDone ? <Check className="w-3.5 h-3.5 stroke-[2.5]" /> : step.number}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs font-semibold truncate">{step.shortTitle}</div>
-                  <div className="text-3xs text-text-muted truncate">{isDone ? 'Completed' : isCurrent ? 'Active Now' : 'Upcoming'}</div>
+                  <div className="text-xs font-semibold truncate font-sans">{step.shortTitle}</div>
+                  <div className="text-[10px] font-mono text-slate-400 truncate">
+                    {isDone ? 'Completed' : isCurrent ? 'Active Now' : 'Upcoming'}
+                  </div>
                 </div>
               </button>
             )

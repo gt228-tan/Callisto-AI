@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AppProvider } from '@/contexts/AppContext'
 import { ToastProvider } from '@/contexts/ToastContext'
@@ -6,6 +7,7 @@ import { CampaignProvider } from '@/contexts/CampaignContext'
 import { AuditProvider } from '@/contexts/AuditContext'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { Login } from '@/pages/Login'
+import { CallistoPreloader } from '@/components/ui/CallistoPreloader'
 import { InactivityModal } from '@/components/auth/InactivityModal'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { AppShell } from '@/components/layout/AppShell'
@@ -31,10 +33,16 @@ import {
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth()
+  const [hasPreloaded, setHasPreloaded] = useState(false)
+
+  // Show authentic NASA Callisto Moon preloader before the login page for 5 seconds
+  if (!isAuthenticated && !hasPreloaded) {
+    return <CallistoPreloader onComplete={() => setHasPreloaded(true)} durationSeconds={5} />
+  }
 
   // Display enterprise Login page before any actual workspace views
   if (!isAuthenticated) {
-    return <Login />
+    return <Login onReplayPreloader={() => setHasPreloaded(false)} />
   }
 
   return (

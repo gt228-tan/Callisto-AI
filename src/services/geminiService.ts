@@ -1,6 +1,34 @@
-
 import { sanitizeInput, hasInjectionRisk } from '@/lib/security'
 
+// ── Types (full call simulation flow) ────────────────────────────────────────
+export interface GeminiMessage {
+  role: 'user' | 'model'
+  parts: Array<{ text: string }>
+}
+
+export interface CallContext {
+  prospectName: string
+  company: string
+  industry?: string
+  agentName: string
+  language: 'en' | 'hi' | 'gu'
+  scenario: 'INTERESTED' | 'VOICEMAIL' | 'CALLBACK' | 'FAQ' | 'RETRY'
+  intentScore?: number
+  buyingSignals?: string[]
+  previousTranscript?: Array<{ speaker: 'AI' | 'PROSPECT'; text: string }>
+}
+
+export interface GeminiResponse {
+  text: string
+  sentiment: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE'
+  intent: 'HIGH' | 'MEDIUM' | 'LOW'
+  buyingSignals: string[]
+  objections: string[]
+  suggestedNextTurn: string
+  qualification: 'QUALIFIED' | 'LIKELY' | 'NEEDS_REVIEW' | 'NOT_QUALIFIED'
+}
+
+// ── Types (simplified call flow) ─────────────────────────────────────────────
 export interface ConversationTurn {
   speaker: 'AI' | 'PROSPECT'
   text: string
@@ -44,21 +72,42 @@ export function checkAiRateLimit(): { allowed: boolean; remaining: number; retry
   return { allowed: true, remaining: MAX_AI_CALLS_PER_MINUTE - aiRateLimitHistory.length }
 }
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-1.5-flash'
-export const DISPLAY_ENGINE_LABEL = 'gemini-3.8-flash'
+// ============================================================
+// 🔑 GOOGLE GEMINI API KEY CONFIGURATION
+// You can paste your API key here, or set VITE_GEMINI_API_KEY in .env
+// ============================================================ 
+export const GEMINI_API_KEY: string = 'AQ.Ab8RN6ITppXqnGZsRFCYyMqHNVOiyb_MWjYk9tM0AmALT7hLmg'
 
+// ── Model Config: gemini-3.8-flash is the exclusive model used throughout ──
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash'
+export const DISPLAY_ENGINE_LABEL = 'gemini-3.8-flash'
+export const GEMINI_MODEL_DISPLAY = 'gemini-3.8-flash'
 
 export function getGeminiApiKey(): string | null {
+  // 1. Direct compile-time constant
+  if (
+    typeof GEMINI_API_KEY === 'string' &&
+    GEMINI_API_KEY.trim().length > 0 &&
+    GEMINI_API_KEY !== 'ENTER_API_KEY' &&
+    GEMINI_API_KEY !== 'ENTER_YOUR_GEMINI_API_KEY_HERE'
+  ) {
+    return GEMINI_API_KEY.trim()
+  }
+
+  // 2. Vite environment variable (.env)
   const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.GEMINI_API_KEY
   if (envKey && typeof envKey === 'string' && envKey.trim().length > 0) {
     return envKey.trim()
   }
+
+  // 3. Browser localStorage
   if (typeof window !== 'undefined') {
     const localKey = localStorage.getItem('callisto_gemini_api_key')
     if (localKey && localKey.trim().length > 0) {
       return localKey.trim()
     }
   }
+
   return null
 }
 
@@ -82,6 +131,227 @@ export function isGeminiConfigured(): boolean {
   return Boolean(getGeminiApiKey())
 }
 
+// ── System prompt builder ─────────────────────────────────────────────────────
+export function buildSalesAgentSystemPrompt(ctx: CallContext): string {
+  const langInstructions =
+    ctx.language === 'hi'
+      ? 'Respond ONLY in Hindi. Use natural, conversational Hindi like a real professional salesperson.'
+      : ctx.language === 'gu'
+        ? 'Respond ONLY in Gujarati. Use natural, conversational Gujarati like a real professional salesperson.'
+        : 'Respond in professional, conversational English.'
+
+  return `You are ${ctx.agentName}, an elite AI sales representative for Callisto AI Solutions.
+
+YOUR PERSONA: warm, confident, deeply human in tone — NOT robotic. Top-performing salesperson: empathetic, persuasive, curious. Handle objections gracefully with evidence and empathy.
+
+COMPANY (Callisto AI Solutions):
+- AI Voice Agents that call leads 24/7, qualify prospects, and book meetings automatically
+- CRM sync (Salesforce, HubSpot), real-time conversation intelligence
+- Multilingual: English, Hindi, Gujarati, Spanish, French, German
+- SOC-2 Type II certified, HIPAA compliant, <420ms voice latency
+- Proven ROI: 3x more qualified meetings, 67% reduction in SDR costs
+- Pricing: Rs 15-50 lakhs/year or $20K-$60K/year enterprise; 14-day free trial
+- Onboarding: 2-week implementation, dedicated success manager
+
+CURRENT CALL:
+- Prospect: ${ctx.prospectName} at ${ctx.company}${ctx.industry ? ` (${ctx.industry})` : ''}
+- Scenario: ${ctx.scenario}
+- Intent Score: ${ctx.intentScore ?? 'Unknown'}/100
+
+LANGUAGE INSTRUCTION: ${langInstructions}
+
+CALL RULES:
+1. Keep responses under 70 words
+2. Always end with a question OR a clear concrete next step
+3. Never bad-mouth competitors; pivot to your strengths
+4. Sound 100% human — never say "As an AI" or "I am programmed to"
+5. When pricing is asked, give a real range and offer the free trial immediately
+
+Respond as the AI agent spoken words ONLY. No labels, no meta-commentary.`
+}
+
+// ── Analysis prompt builder ───────────────────────────────────────────────────
+export function buildAnalysisPrompt(
+  transcript: Array<{ speaker: 'AI' | 'PROSPECT'; text: string }>,
+  prospectName: string
+): string {
+  const transcriptText = transcript.map(t => `${t.speaker}: ${t.text}`).join('\n')
+  return `Analyze this sales call. Focus on ${prospectName}'s responses.
+
+TRANSCRIPT:
+${transcriptText}
+
+Return a single valid JSON object (no markdown):
+{
+  "sentiment": "POSITIVE",
+  "intent": "HIGH",
+  "qualification": "QUALIFIED",
+  "buyingSignals": ["Budget confirmed: 20 lakhs"],
+  "objections": ["Pricing needs validation"],
+  "nextBestAction": "Schedule demo this week",
+  "callSummary": "Prospect confirmed budget and timeline.",
+  "engagementScore": 88
+}
+
+CRITICAL: Output ONLY the raw JSON object.`
+}
+
+// ── Core API caller ───────────────────────────────────────────────────────────
+const CANDIDATE_MODELS = ['gemini-3.1-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.8-flash']
+
+export async function callGeminiAPI(
+  messages: GeminiMessage[],
+  systemInstruction: string,
+  maxOutputTokens = 600
+): Promise<string> {
+  const apiKey = getGeminiApiKey()
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured. Please configure your key in Settings or environment.')
+  }
+
+  const body = {
+    system_instruction: { parts: [{ text: systemInstruction }] },
+    contents: messages,
+    generationConfig: { temperature: 0.82, topK: 40, topP: 0.95, maxOutputTokens },
+    safetySettings: [
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+    ],
+  }
+
+  let lastError = ''
+  for (const model of CANDIDATE_MODELS) {
+    try {
+      const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+      const response = await fetch(`${baseUrl}?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      if (!response.ok) {
+        lastError = await response.text()
+        console.warn(`[Gemini ${model}] returned ${response.status}: ${lastError.slice(0, 100)}`)
+        continue
+      }
+
+      const data = await response.json()
+      const parts: Array<Record<string, unknown>> = data?.candidates?.[0]?.content?.parts ?? []
+      const textParts = parts
+        .filter((p) => typeof p.text === 'string' && (p.text as string).trim().length > 0)
+        .map((p) => (p.text as string).trim())
+
+      if (textParts.length > 0) {
+        return textParts.join('\n')
+      }
+    } catch (err: any) {
+      lastError = err.message
+      console.warn(`[Gemini ${model} Error]`, err.message)
+    }
+  }
+
+  throw new Error(`Gemini API error across all models: ${lastError.slice(0, 150)}`)
+}
+
+// ── Generate AI Sales Agent Response ─────────────────────────────────────────
+export async function generateAgentResponse(
+  ctx: CallContext,
+  conversationHistory: GeminiMessage[],
+  prospectMessage: string
+): Promise<string> {
+  const messages: GeminiMessage[] = [
+    ...conversationHistory,
+    { role: 'user', parts: [{ text: prospectMessage }] },
+  ]
+  return (await callGeminiAPI(messages, buildSalesAgentSystemPrompt(ctx), 600)).trim()
+}
+
+// ── Generate Opening Statement ────────────────────────────────────────────────
+export async function generateOpeningStatement(ctx: CallContext): Promise<string> {
+  const openingPrompt =
+    ctx.language === 'hi'
+      ? `Generate a warm Hindi opening statement as ${ctx.agentName} calling ${ctx.prospectName} from ${ctx.company}. Under 45 words. End with a question.`
+      : ctx.language === 'gu'
+        ? `Generate a warm Gujarati opening statement as ${ctx.agentName} calling ${ctx.prospectName} from ${ctx.company}. Under 45 words. End with a question.`
+        : `Generate a warm English opening statement as ${ctx.agentName} calling ${ctx.prospectName} from ${ctx.company}. Reference a specific reason. Under 45 words. End with asking if they have 2 minutes.`
+  const messages: GeminiMessage[] = [{ role: 'user', parts: [{ text: openingPrompt }] }]
+  return (await callGeminiAPI(messages, buildSalesAgentSystemPrompt(ctx), 300)).trim()
+}
+
+// ── Analyze Full Call Transcript ──────────────────────────────────────────────
+export async function analyzeCallTranscript(
+  transcript: Array<{ speaker: 'AI' | 'PROSPECT'; text: string }>,
+  prospectName: string
+): Promise<{
+  sentiment: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE'
+  intent: 'HIGH' | 'MEDIUM' | 'LOW'
+  qualification: 'QUALIFIED' | 'LIKELY' | 'NEEDS_REVIEW' | 'NOT_QUALIFIED'
+  buyingSignals: string[]
+  objections: string[]
+  nextBestAction: string
+  callSummary: string
+  engagementScore: number
+}> {
+  try {
+    const messages: GeminiMessage[] = [{ role: 'user', parts: [{ text: buildAnalysisPrompt(transcript, prospectName) }] }]
+    const raw = await callGeminiAPI(
+      messages,
+      'You are an expert sales call analyst. Output ONLY a single valid JSON object parseable by JSON.parse().',
+      1200
+    )
+    const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+    try {
+      return JSON.parse(clean)
+    } catch {
+      const jsonMatch = clean.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        try { return JSON.parse(jsonMatch[0]) } catch { /* fall through */ }
+      }
+    }
+  } catch (err) {
+    console.warn('analyzeCallTranscript live API error, using structured fallback:', err)
+  }
+
+  return {
+    sentiment: 'NEUTRAL',
+    intent: 'MEDIUM',
+    qualification: 'NEEDS_REVIEW',
+    buyingSignals: ['Engaged with the call'],
+    objections: ['Needs further evaluation'],
+    nextBestAction: 'Follow up with personalized proposal within 48 hours',
+    callSummary: 'Call completed. Prospect showed interest in the platform.',
+    engagementScore: 65,
+  }
+}
+
+// ── Generate FAQ Answer ───────────────────────────────────────────────────────
+export async function generateFAQAnswer(question: string, ctx: CallContext): Promise<string> {
+  const faqPrompt = `The prospect asked: "${question}"\nAnswer naturally as ${ctx.agentName}. Specific, real numbers. Under 60 words. End with a question.`
+  return (await callGeminiAPI([{ role: 'user', parts: [{ text: faqPrompt }] }], buildSalesAgentSystemPrompt(ctx), 400)).trim()
+}
+
+// ── Generate Voicemail Script ─────────────────────────────────────────────────
+export async function generateVoicemailScript(ctx: CallContext): Promise<string> {
+  const vmPrompt =
+    ctx.language === 'hi'
+      ? `Compelling Hindi voicemail as ${ctx.agentName} for ${ctx.prospectName} at ${ctx.company}. Under 35 words. Include +91 80 4912 0000.`
+      : ctx.language === 'gu'
+        ? `Compelling Gujarati voicemail as ${ctx.agentName} for ${ctx.prospectName} at ${ctx.company}. Under 35 words. Include +91 80 4912 0000.`
+        : `Compelling English voicemail as ${ctx.agentName} for ${ctx.prospectName} at ${ctx.company}. Under 35 words. Include +1 (415) 800-2931.`
+  return (await callGeminiAPI([{ role: 'user', parts: [{ text: vmPrompt }] }], buildSalesAgentSystemPrompt(ctx), 300)).trim()
+}
+
+// ── Generate Next Best Action ─────────────────────────────────────────────────
+export async function generateAINextBestAction(
+  transcript: Array<{ speaker: 'AI' | 'PROSPECT'; text: string }>,
+  qualification: string,
+  prospectName: string,
+  company: string
+): Promise<string> {
+  const prompt = `Sales call with ${prospectName} at ${company} (Qualification: ${qualification}):\n${transcript.slice(-4).map(t => `${t.speaker}: ${t.text}`).join('\n')}\nGenerate ONE specific time-bound next step under 30 words.`
+  return (await callGeminiAPI([{ role: 'user', parts: [{ text: prompt }] }], 'Output only the action text, nothing else.', 200)).trim()
+}
+
 /**
  * Generate real-time sales response from Gemini AI or high-fidelity enterprise SDR fallback
  */
@@ -93,8 +363,8 @@ export async function generateGeminiSalesResponse(
   _language: string = 'English'
 ): Promise<SalesResponseResult> {
   const cleanAgent = agentName.replace(/\s*\(.*\)/, '').trim() || 'Aria'
-  const pName = prospectName.trim() || 'Rohan Verma'
-  const pFirst = pName.split(' ')[0] || 'Rohan'
+  const pName = prospectName.trim() || 'GT Edits'
+  const pFirst = pName.split(' ')[0] || 'GT'
 
   // Rate Limiting Shield: Max 15 calls / minute to prevent DoS / API abuse
   const rateCheck = checkAiRateLimit()
@@ -181,7 +451,7 @@ export async function generateGeminiSalesResponse(
 
   if (lower.includes('case study') || lower.includes('example') || lower.includes('proof') || lower.includes('roi')) {
     return {
-      text: `Absolutely! We recently helped a leading enterprise team increase their outbound qualification rate by 3.2x while reducing cost-per-lead by 48% within 60 days. I can send their full ROI case study directly to your email right now. Shall I send it over?`,
+      text: `We helped an enterprise team increase qualified meetings by 3.2x and cut cost-per-lead by 48% in 60 days. Shall I send their full ROI case study now?`,
       isGemini: true
     }
   }

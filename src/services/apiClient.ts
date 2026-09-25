@@ -131,3 +131,78 @@ export async function sendWebhookPing(sourceId: string, payload: any): Promise<{
   }
   return { success: true, message: 'Processed via client simulation engine (no server response required).' }
 }
+
+/**
+ * Syncs completed voice call recording & intelligence to live backend CRM gateway
+ */
+export async function syncVoiceCallWithServer(callData: any): Promise<{ success: boolean; message: string; data?: any }> {
+  const serverUrl = getSavedServerUrl().replace(/\/+$/, '')
+  try {
+    const res = await fetch(`${serverUrl}/api/crm/sync-call`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('callisto_jwt_token') || 'demo_token'}`,
+        'x-callisto-role': 'ADMIN',
+      },
+      body: JSON.stringify(callData),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      return { success: true, message: data.message || 'Synced voice call with backend CRM', data }
+    }
+    const errData = await res.json().catch(() => ({}))
+    return { success: false, message: errData.error || `Server HTTP ${res.status}` }
+  } catch (err: any) {
+    return { success: false, message: `Server not reachable, running client sync.` }
+  }
+}
+
+/**
+ * Syncs sales activities (Calendly meetings, handoffs, campaigns) to backend CRM gateway
+ */
+export async function syncActivityWithServer(activityData: any): Promise<{ success: boolean; message: string; data?: any }> {
+  const serverUrl = getSavedServerUrl().replace(/\/+$/, '')
+  try {
+    const res = await fetch(`${serverUrl}/api/crm/sync-activity`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('callisto_jwt_token') || 'demo_token'}`,
+        'x-callisto-role': 'ADMIN',
+      },
+      body: JSON.stringify(activityData),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      return { success: true, message: data.message || 'Synced activity with backend CRM', data }
+    }
+    const errData = await res.json().catch(() => ({}))
+    return { success: false, message: errData.error || `Server HTTP ${res.status}` }
+  } catch (err: any) {
+    return { success: false, message: `Server not reachable, running client sync.` }
+  }
+}
+
+/**
+ * Fetches all synced voice calls and activities from backend server
+ */
+export async function fetchSyncedActivitiesFromServer(): Promise<{ success: boolean; voiceCalls: any[]; activities: any[] }> {
+  const serverUrl = getSavedServerUrl().replace(/\/+$/, '')
+  try {
+    const res = await fetch(`${serverUrl}/api/crm/synced-activities`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('callisto_jwt_token') || 'demo_token'}`,
+        'x-callisto-role': 'ADMIN',
+      },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      return { success: true, voiceCalls: data.voiceCalls || [], activities: data.activities || [] }
+    }
+  } catch (err) {
+    // fallback
+  }
+  return { success: false, voiceCalls: [], activities: [] }
+}
+

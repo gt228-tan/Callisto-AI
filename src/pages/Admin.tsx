@@ -39,7 +39,7 @@ export function AdminDashboard() {
   const activityData = Array.from({length:30},(_,i)=>({ day:`${i+1}`, calls: Math.floor(Math.random()*200)+50, leads: Math.floor(Math.random()*100)+30 }))
 
   return (
-    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center gap-2">
         <Shield className="w-4 h-4 text-blue-400 shrink-0" />
         <h1 className="text-sm font-bold text-text-primary">Admin Dashboard</h1>
@@ -161,7 +161,7 @@ export function AdminUsers() {
   }
 
   return (
-    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <UserCog className="w-4 h-4 text-blue-400 shrink-0" />
@@ -359,7 +359,7 @@ export function AdminAuditLogs() {
   ]
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -477,7 +477,7 @@ export function AdminFraud() {
   const mediumCount = securityAlerts.filter(f => f.severity === 'MEDIUM').length + fraudAlerts.filter(f => f.severity === 'MEDIUM').length
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-blue-400" />
@@ -606,7 +606,7 @@ export function AdminSystem() {
   }))
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center gap-2">
         <Activity className="w-4 h-4 text-blue-400" />
         <h1 className="text-sm font-bold text-text-primary">System Monitoring</h1>
@@ -672,7 +672,7 @@ export function AdminSystem() {
 // ============================================================
 export function AdminVoiceUsage() {
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center gap-2">
         <Volume2 className="w-4 h-4 text-blue-400" />
         <h1 className="text-sm font-bold text-text-primary">Voice Usage</h1>
@@ -716,7 +716,7 @@ export function AdminSubscriptions() {
   const monthlyRevenue = plans.reduce((s, p) => s + p.price * p.count, 0)
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center gap-2">
         <CreditCard className="w-4 h-4 text-blue-400" />
         <h1 className="text-sm font-bold text-text-primary">Subscriptions</h1>
@@ -758,7 +758,7 @@ export function AdminBilling() {
   ]
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center gap-2">
         <Receipt className="w-4 h-4 text-blue-400" />
         <h1 className="text-sm font-bold text-text-primary">Billing</h1>
@@ -791,7 +791,7 @@ export function AdminBilling() {
 export function AdminPlatformSettings() {
   const { showToast } = useToast()
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center gap-2">
         <Sliders className="w-4 h-4 text-blue-400" />
         <h1 className="text-sm font-bold text-text-primary">Platform Settings</h1>
@@ -983,7 +983,7 @@ export function AdminProductApprovals() {
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

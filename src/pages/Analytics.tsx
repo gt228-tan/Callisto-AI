@@ -77,11 +77,16 @@ export function Analytics() {
   const convRate       = ((meetings / totalCalls) * 100).toFixed(1)
 
   return (
-    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-amber-400 shrink-0" />
-          <h1 className="text-sm font-bold text-text-primary">Analytics</h1>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-bg-border/60">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <BarChart3 className="w-4 h-4" />
+          </div>
+          <div>
+            <h1 className="text-base sm:text-lg font-bold text-text-primary tracking-tight">Analytics & Intelligence</h1>
+            <p className="text-2xs text-text-muted font-mono hidden sm:block">Cross-channel funnel velocity, speech duration & deal conversions</p>
+          </div>
         </div>
         <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-thin">
           {dateFilters.map(f => (

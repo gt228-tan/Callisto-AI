@@ -3,9 +3,10 @@ import { LayoutDashboard, Users, Megaphone, PhoneCall, Workflow, Menu } from 'lu
 import { useAppContext } from '@/contexts/AppContext'
 import { cn } from '@/lib/utils'
 
-export function BottomNav() {
-  const { setMobileNavOpen, t } = useAppContext()
+export function BottomNav({ embedded = false }: { embedded?: boolean }) {
+  const { setMobileNavOpen, t, deviceMode } = useAppContext()
   const location = useLocation()
+  const isEmbedded = embedded || deviceMode === 'android' || deviceMode === 'ios'
 
   const navItems = [
     { to: '/', labelKey: 'nav.overview', icon: LayoutDashboard },
@@ -17,7 +18,12 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 h-14 bg-bg-secondary/95 backdrop-blur-md border-t border-bg-border z-30 md:hidden flex items-center justify-around px-1 safe-bottom"
+      className={cn(
+        'bg-bg-secondary/95 backdrop-blur-2xl border-t border-bg-border/80 z-30 flex items-center justify-around px-2 shadow-2xl',
+        isEmbedded
+          ? 'relative shrink-0 h-14'
+          : 'fixed bottom-0 left-0 right-0 h-16 md:hidden safe-bottom'
+      )}
       aria-label="Mobile Navigation"
     >
       {navItems.map(item => {
@@ -31,19 +37,21 @@ export function BottomNav() {
             key={item.to}
             to={item.to}
             className={cn(
-              'flex flex-col items-center justify-center flex-1 h-full py-1 text-2xs font-medium transition-colors select-none',
+              'flex flex-col items-center justify-center flex-1 h-full py-1 text-[11px] font-medium transition-all select-none',
               isActive
-                ? 'text-amber-400 font-semibold'
-                : 'text-text-muted hover:text-text-primary'
+                ? 'text-sky-300 font-semibold'
+                : 'text-slate-400 hover:text-slate-200'
             )}
           >
             <div className={cn(
-              'relative p-1 rounded-md transition-all',
-              isActive && 'bg-amber-500/10'
+              'relative p-1.5 rounded-xl transition-all',
+              isActive && 'bg-sky-500/15 text-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.25)] border border-sky-500/30'
             )}>
-              <Icon className={cn('w-4 h-4 transition-transform', isActive && 'scale-110 text-amber-400')} />
+              <Icon className={cn('w-4 h-4 transition-transform', isActive && 'scale-110')} />
             </div>
-            <span className="leading-tight mt-0.5 truncate max-w-[56px] text-center">{t(item.labelKey)}</span>
+            <span className="leading-tight mt-1 truncate max-w-[56px] text-center font-sans tracking-tight">
+              {t(item.labelKey)}
+            </span>
           </NavLink>
         )
       })}
@@ -52,13 +60,13 @@ export function BottomNav() {
       <button
         type="button"
         onClick={() => setMobileNavOpen(true)}
-        className="flex flex-col items-center justify-center flex-1 h-full py-1 text-2xs font-medium text-text-muted hover:text-text-primary transition-colors select-none"
+        className="flex flex-col items-center justify-center flex-1 h-full py-1 text-[11px] font-medium text-slate-400 hover:text-slate-200 transition-colors select-none"
         aria-label="Open Full Navigation Menu"
       >
-        <div className="p-1 rounded-md hover:bg-bg-hover">
-          <Menu className="w-4 h-4" />
+        <div className="p-1.5 rounded-xl hover:bg-bg-hover transition-colors">
+          <Menu className="w-4 h-4 text-slate-400" />
         </div>
-        <span className="leading-tight mt-0.5">{t('nav.more', 'More')}</span>
+        <span className="leading-tight mt-1 text-center font-sans">Menu</span>
       </button>
     </nav>
   )

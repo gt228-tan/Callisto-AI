@@ -124,20 +124,26 @@ export function BusinessOnboarding() {
   }
 
   return (
-    <div className="p-3 sm:p-4 space-y-4 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-bg-border/60">
         <div>
-          <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-blue-400 shrink-0" />
-            <h1 className="text-sm font-bold text-text-primary">
-              {t('onboard.title', 'Business Understanding & ICP Engine')}
-            </h1>
-            <span className="badge-blue text-2xs">STEP 1</span>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+              <Globe className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base sm:text-lg font-bold text-text-primary tracking-tight">
+                  {t('onboard.title', 'Business Understanding & ICP Engine')}
+                </h1>
+                <span className="badge-blue text-2xs font-mono">STEP 1</span>
+              </div>
+              <p className="text-2xs text-text-muted mt-0.5">
+                {t('onboard.subtitle', 'Provide your company URL and business docs to let AI extract your value proposition and target buyer personas')}
+              </p>
+            </div>
           </div>
-          <p className="text-2xs text-text-muted mt-0.5">
-            {t('onboard.subtitle', 'Provide your company URL and business docs to let AI extract your value proposition and target buyer personas')}
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <button

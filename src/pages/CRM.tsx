@@ -3,7 +3,8 @@ import {
   Link2, CheckCircle, XCircle, RefreshCw, Settings, Upload, Download,
   Server, Globe, Database, Activity, Terminal, Copy, Check, ExternalLink,
   Zap, Plus, Trash2, Play, ShieldCheck, AlertCircle, ArrowRight, Code2,
-  Sliders, Search, ArrowUpRight, ArrowDownLeft, Layers, Radio
+  Sliders, Search, ArrowUpRight, ArrowDownLeft, Layers, Radio, Phone,
+  Mic, Clock, Sparkles, User, Calendar
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { useLeads } from '@/contexts/LeadContext'
@@ -14,13 +15,16 @@ import { ImportLeadsModal } from '@/components/ui/ImportLeadsModal'
 import {
   loadCrms, saveCrms, loadLeadSources, saveLeadSources,
   loadSyncLogs, addSyncLog, generateMockLeadsForSource,
+  loadVoiceAgentCrmConfig, saveVoiceAgentCrmConfig,
+  loadSyncedVoiceCalls, syncVoiceCallToCrm, syncBatchVoiceCallsToCrm,
   type CRMIntegration, type LeadSourceIntegration, type SyncActivityRecord,
-  type CrmStatus, type LeadSourceStatus, type SyncDirection
+  type CrmStatus, type LeadSourceStatus, type SyncDirection,
+  type VoiceAgentCrmConfig, type SyncedVoiceCallRecord, type VoiceCallSyncPayload
 } from '@/services/crmService'
 import { checkServerHealth, getSavedServerUrl, saveServerUrl, type ServerHealthResult } from '@/services/apiClient'
-import { formatDateTime, timeAgo } from '@/lib/utils'
+import { formatDateTime, formatDuration, timeAgo } from '@/lib/utils'
 
-type ActiveTab = 'crms' | 'sources' | 'logs' | 'server' | 'data'
+type ActiveTab = 'crms' | 'voice_sync' | 'sources' | 'logs' | 'server' | 'data'
 
 const statusStyles: Record<CrmStatus, { badge: string; icon: React.ReactNode }> = {
   CONNECTED:    { badge: 'badge-success', icon: <CheckCircle className="w-4 h-4 text-success" /> },
@@ -45,6 +49,22 @@ export function CRM() {
   const [crms, setCrms] = useState<CRMIntegration[]>(loadCrms)
   const [sources, setSources] = useState<LeadSourceIntegration[]>(loadLeadSources)
   const [logs, setLogs] = useState<SyncActivityRecord[]>(loadSyncLogs)
+  const [voiceCrmConfig, setVoiceCrmConfig] = useState<VoiceAgentCrmConfig>(loadVoiceAgentCrmConfig)
+  const [syncedVoiceCalls, setSyncedVoiceCalls] = useState<SyncedVoiceCallRecord[]>(loadSyncedVoiceCalls)
+  const [selectedVoiceCallDetail, setSelectedVoiceCallDetail] = useState<SyncedVoiceCallRecord | null>(null)
+  const [isBatchSyncingVoice, setIsBatchSyncingVoice] = useState(false)
+
+  // Listen for cross-app CRM sync events reactively
+  useEffect(() => {
+    function handleCrmSyncEvent() {
+      setCrms(loadCrms())
+      setLogs(loadSyncLogs())
+      setVoiceCrmConfig(loadVoiceAgentCrmConfig())
+      setSyncedVoiceCalls(loadSyncedVoiceCalls())
+    }
+    window.addEventListener('callisto_crm_synced', handleCrmSyncEvent)
+    return () => window.removeEventListener('callisto_crm_synced', handleCrmSyncEvent)
+  }, [])
 
   // Modals & Selection
   const [showImport, setShowImport] = useState(false)
@@ -116,6 +136,82 @@ export function CRM() {
     }
     syncRateLimitRef.current.push(now)
     return true
+  }
+
+  // --- AI Voice Agent CRM Sync Handlers ---
+  function handleToggleVoiceAutoSync() {
+    const updated: VoiceAgentCrmConfig = {
+      ...voiceCrmConfig,
+      autoSyncCalls: !voiceCrmConfig.autoSyncCalls,
+    }
+    setVoiceCrmConfig(updated)
+    saveVoiceAgentCrmConfig(updated)
+    showToast(
+      'success',
+      'Autonomous Voice Sync Setting',
+      `Auto-Sync is now ${updated.autoSyncCalls ? 'ENABLED (Real-time on call completion)' : 'PAUSED (Manual push only)'}`
+    )
+  }
+
+  function handleUpdateVoiceDefaultCrm(targetId: string) {
+    const updated: VoiceAgentCrmConfig = { ...voiceCrmConfig, targetCrmId: targetId }
+    setVoiceCrmConfig(updated)
+    saveVoiceAgentCrmConfig(updated)
+    showToast('success', 'Default CRM Target Updated', `Voice calls will route to ${targetId.toUpperCase()}`)
+  }
+
+  async function handleBatchSyncAllVoiceCalls() {
+    setIsBatchSyncingVoice(true)
+    try {
+      if (syncedVoiceCalls.length === 0) {
+        // Generate seed calls to demonstrate live CRM sync
+        const demoCalls: VoiceCallSyncPayload[] = [
+          {
+            prospectName: 'Vikram Sethi',
+            company: 'Nexus Health Systems',
+            phone: '+91-98201-44321',
+            email: 'vikram.sethi@nexushealth.in',
+            durationSeconds: 215,
+            outcome: 'MEETING_BOOKED',
+            sentiment: 'POSITIVE',
+            intentScore: 94,
+            qualification: 'QUALIFIED',
+            summary: 'Prospect manages 14 clinics and is looking to automate patient appointment reminders & lab follow-ups. Very receptive to Callisto Voice AI.',
+            buyingSignals: ['Urgent Q3 deployment needed', 'Budget pre-approved up to $4,000/mo', 'Current manual call center churn is 35%'],
+            nextBestAction: 'Send enterprise SLA contract and book technical integration kickoff.',
+            targetCrmId: voiceCrmConfig.targetCrmId,
+          },
+          {
+            prospectName: 'Ananya Deshmukh',
+            company: 'FinEdge Microfinance',
+            phone: '+91-97118-22345',
+            email: 'ananya@finedge.co',
+            durationSeconds: 180,
+            outcome: 'QUALIFIED',
+            sentiment: 'POSITIVE',
+            intentScore: 82,
+            qualification: 'QUALIFIED',
+            summary: 'Interested in autonomous loan verification calls. Asked about multi-lingual dialect support in Hindi and Marathi.',
+            buyingSignals: ['Requires regional language AI calling', 'Security compliance ISO 27001 mandatory'],
+            nextBestAction: 'Schedule 30-min live demo with regional speech model sandbox.',
+            targetCrmId: voiceCrmConfig.targetCrmId,
+          }
+        ]
+        for (const call of demoCalls) {
+          await syncVoiceCallToCrm(call, { force: true })
+        }
+      } else {
+        await syncBatchVoiceCallsToCrm(syncedVoiceCalls, voiceCrmConfig.targetCrmId)
+      }
+      setSyncedVoiceCalls(loadSyncedVoiceCalls())
+      setCrms(loadCrms())
+      setLogs(loadSyncLogs())
+      showToast('success', 'AI Voice Calls Synced', `All voice sessions, audio transcripts & Gemini intelligence synchronized to ${voiceCrmConfig.targetCrmId.toUpperCase()}`)
+    } catch (err: any) {
+      showToast('error', 'Sync Failed', err.message || 'Error syncing calls')
+    } finally {
+      setIsBatchSyncingVoice(false)
+    }
   }
 
   // --- CRM Actions ---
@@ -374,12 +470,12 @@ export function CRM() {
   const categories = ['All', 'B2B Database', 'Social & Professional', 'Local Discovery', 'Email Finder', 'Webhooks & Inbound', 'Paid Ads']
 
   return (
-    <div className="p-3 sm:p-5 space-y-4 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       {/* Top Banner & Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-bg-border pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-bg-border/60 pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
               <Link2 className="w-4 h-4" />
             </div>
             <div>
@@ -387,7 +483,7 @@ export function CRM() {
                 CRM & Lead Sources Hub
                 <span className="badge-blue text-3xs font-mono">ENTERPRISE GATEWAY</span>
               </h1>
-              <p className="text-2xs sm:text-xs text-text-muted">
+              <p className="text-2xs sm:text-xs text-text-muted mt-0.5">
                 Bidirectional CRM synchronization, multi-channel lead ingestion, webhook listeners & live server API
               </p>
             </div>
@@ -399,7 +495,7 @@ export function CRM() {
           {/* Server Status Pill */}
           <button
             onClick={() => setActiveTab('server')}
-            className={`px-2.5 py-1 rounded-md text-2xs font-mono flex items-center gap-1.5 border transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-2xs font-mono flex items-center gap-1.5 border transition-all ${
               serverHealth?.connected
                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
                 : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
@@ -410,15 +506,15 @@ export function CRM() {
             <span>{serverHealth?.connected ? `Live Server (${serverHealth.latencyMs}ms)` : 'Client Mode / Server Guide'}</span>
           </button>
 
-          <button onClick={() => setShowImport(true)} className="btn-secondary text-xs py-1.5 px-3 gap-1.5">
+          <button onClick={() => setShowImport(true)} className="btn-secondary text-xs py-2 px-3 gap-1.5 font-medium">
             <Upload className="w-3.5 h-3.5 text-text-muted" /> Import
           </button>
-          <button onClick={() => handleExportAllLeads()} className="btn-secondary text-xs py-1.5 px-3 gap-1.5">
+          <button onClick={() => handleExportAllLeads()} className="btn-secondary text-xs py-2 px-3 gap-1.5 font-medium">
             <Download className="w-3.5 h-3.5 text-text-muted" /> Export
           </button>
           <button
             onClick={() => setActiveTab('server')}
-            className="btn-primary text-xs py-1.5 px-3.5 gap-1.5 font-semibold shadow-md shadow-amber-500/20"
+            className="btn-primary text-xs py-2 px-3.5 gap-1.5 font-semibold shadow-md shadow-amber-500/20"
           >
             <Server className="w-3.5 h-3.5" /> Connect to Server
           </button>
@@ -426,7 +522,7 @@ export function CRM() {
       </div>
 
       {/* Metric Cards Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-5">
         <div className="panel p-3.5 flex flex-col justify-between">
           <div className="flex items-center justify-between text-text-muted text-2xs">
             <span>Connected CRMs</span>
@@ -489,6 +585,7 @@ export function CRM() {
         <div className="flex items-center gap-1 shrink-0">
           {[
             { id: 'crms', label: 'CRM Platforms', icon: <Database className="w-3.5 h-3.5" />, count: crms.length },
+            { id: 'voice_sync', label: 'AI Voice & Sales Sync', icon: <Phone className="w-3.5 h-3.5" />, count: syncedVoiceCalls.length, highlight: syncedVoiceCalls.length > 0 },
             { id: 'sources', label: 'Lead Source Integrations', icon: <Globe className="w-3.5 h-3.5" />, count: sources.length },
             { id: 'logs', label: 'Sync & Webhook Activity', icon: <Activity className="w-3.5 h-3.5" />, count: logs.length },
             { id: 'server', label: 'Server Connection & Live Setup', icon: <Server className="w-3.5 h-3.5" />, highlight: true },
@@ -611,6 +708,346 @@ export function CRM() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: AI Voice & Sales Sync */}
+      {activeTab === 'voice_sync' && (
+        <div className="space-y-4 animate-fade-in">
+          {/* Top Banner & Autonomous Controls */}
+          <div className="panel p-5 bg-gradient-to-r from-bg-card via-amber-950/10 to-bg-card border border-amber-500/30">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/10">
+                  <Phone className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-text-primary">Autonomous AI Voice-to-CRM Intelligence Engine</h2>
+                    <span className="badge badge-success text-3xs font-mono flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Live Bridge
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-secondary mt-0.5 max-w-2xl">
+                    Every completed AI voice call is analyzed by Gemini Flash for qualification, intent score (0-100), and sentiment, then automatically synchronized to CRM contacts, activity notes, and scheduled follow-ups.
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Config Controls */}
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0 bg-neutral-900/60 p-2.5 rounded-lg border border-neutral-800">
+                <div className="flex items-center gap-2 pr-3 border-r border-neutral-800">
+                  <span className="text-2xs text-text-muted">Target CRM:</span>
+                  <select
+                    className="input text-2xs py-1 px-2 font-medium bg-neutral-800 border-neutral-700"
+                    value={voiceCrmConfig.targetCrmId}
+                    onChange={e => handleUpdateVoiceDefaultCrm(e.target.value)}
+                  >
+                    {crms.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.status === 'CONNECTED' ? 'Active' : 'Offline'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleToggleVoiceAutoSync}
+                  className={`btn text-2xs py-1 px-2.5 gap-1.5 transition-all ${
+                    voiceCrmConfig.autoSyncCalls
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                      : 'bg-neutral-800 text-text-muted border border-neutral-700 hover:text-text-primary'
+                  }`}
+                >
+                  <Zap className="w-3 h-3" />
+                  Auto-Push: {voiceCrmConfig.autoSyncCalls ? 'ON' : 'OFF'}
+                </button>
+
+                <button
+                  onClick={handleBatchSyncAllVoiceCalls}
+                  disabled={isBatchSyncingVoice}
+                  className="btn-primary text-2xs py-1 px-3 gap-1.5 font-bold shadow-md shadow-amber-500/10"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isBatchSyncingVoice ? 'animate-spin' : ''}`} />
+                  {isBatchSyncingVoice ? 'Syncing...' : 'Sync All Calls'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Metrics Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="panel p-3.5 bg-bg-card border border-bg-border flex flex-col justify-between">
+              <div className="flex items-center justify-between text-text-muted">
+                <span className="text-2xs font-medium uppercase tracking-wider">Synced Voice Calls</span>
+                <Phone className="w-3.5 h-3.5 text-amber-400" />
+              </div>
+              <div className="mt-2">
+                <div className="text-xl font-bold font-mono text-text-primary">{syncedVoiceCalls.length}</div>
+                <div className="text-3xs text-emerald-400 mt-0.5">Recorded & mapped to CRM</div>
+              </div>
+            </div>
+
+            <div className="panel p-3.5 bg-bg-card border border-bg-border flex flex-col justify-between">
+              <div className="flex items-center justify-between text-text-muted">
+                <span className="text-2xs font-medium uppercase tracking-wider">High Intent Qualified</span>
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <div className="mt-2">
+                <div className="text-xl font-bold font-mono text-emerald-400">
+                  {syncedVoiceCalls.filter(c => c.qualification === 'QUALIFIED' || (c.intentScore || 0) >= 70).length}
+                </div>
+                <div className="text-3xs text-text-muted mt-0.5">Marked as HOT / High Priority</div>
+              </div>
+            </div>
+
+            <div className="panel p-3.5 bg-bg-card border border-bg-border flex flex-col justify-between">
+              <div className="flex items-center justify-between text-text-muted">
+                <span className="text-2xs font-medium uppercase tracking-wider">Talk Time Synced</span>
+                <Clock className="w-3.5 h-3.5 text-blue-400" />
+              </div>
+              <div className="mt-2">
+                <div className="text-xl font-bold font-mono text-text-primary">
+                  {Math.round(syncedVoiceCalls.reduce((acc, c) => acc + (c.durationSeconds || 0), 0) / 60)}m
+                </div>
+                <div className="text-3xs text-text-muted mt-0.5">Audio transcripts attached</div>
+              </div>
+            </div>
+
+            <div className="panel p-3.5 bg-bg-card border border-bg-border flex flex-col justify-between">
+              <div className="flex items-center justify-between text-text-muted">
+                <span className="text-2xs font-medium uppercase tracking-wider">Target CRM Node</span>
+                <Database className="w-3.5 h-3.5 text-amber-400" />
+              </div>
+              <div className="mt-2">
+                <div className="text-sm font-bold font-mono text-amber-300 truncate">
+                  {voiceCrmConfig.targetCrmId.toUpperCase()}
+                </div>
+                <div className="text-3xs text-text-muted mt-0.5">
+                  {crms.find(c => c.id === voiceCrmConfig.targetCrmId)?.status === 'CONNECTED' ? '● Live Socket Connected' : '○ Standby'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Native Field Mapping Pipeline Architecture */}
+          <div className="panel p-4 bg-bg-card border border-bg-border space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-text-primary">Bi-Directional Voice Field Mappings to CRM</span>
+              </div>
+              <span className="text-3xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                Autonomous Normalization Active
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-2xs">
+              <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mic className="w-3.5 h-3.5 text-amber-400" />
+                  <div>
+                    <div className="font-semibold text-text-primary">Voice Audio & Transcript</div>
+                    <div className="text-3xs text-text-muted">Complete two-way dialogue</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3 h-3 text-neutral-600" />
+                <span className="font-mono text-3xs text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded">CRM Activity Note</span>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <div>
+                    <div className="font-semibold text-text-primary">Gemini Intent Score (0-100)</div>
+                    <div className="text-3xs text-text-muted">Extracted buying propensity</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3 h-3 text-neutral-600" />
+                <span className="font-mono text-3xs text-emerald-300 bg-emerald-500/10 px-1.5 py-0.5 rounded">Lead Rating / Score</span>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                  <div>
+                    <div className="font-semibold text-text-primary">Qualification Verdict</div>
+                    <div className="text-3xs text-text-muted">HOT, WARM, NURTURE, COLD</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3 h-3 text-neutral-600" />
+                <span className="font-mono text-3xs text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">Lead Pipeline Stage</span>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-purple-400" />
+                  <div>
+                    <div className="font-semibold text-text-primary">Sentiment & Objections</div>
+                    <div className="text-3xs text-text-muted">Gemini tone analysis</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3 h-3 text-neutral-600" />
+                <span className="font-mono text-3xs text-purple-300 bg-purple-500/10 px-1.5 py-0.5 rounded">Opportunity Custom Field</span>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                  <div>
+                    <div className="font-semibold text-text-primary">Next Best Action / Meeting</div>
+                    <div className="text-3xs text-text-muted">Calendly & callback tasks</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3 h-3 text-neutral-600" />
+                <span className="font-mono text-3xs text-cyan-300 bg-cyan-500/10 px-1.5 py-0.5 rounded">CRM Task / Event</span>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Radio className="w-3.5 h-3.5 text-pink-400" />
+                  <div>
+                    <div className="font-semibold text-text-primary">Cryptographic Audit Hash</div>
+                    <div className="text-3xs text-text-muted">SHA-256 tamper-evident log</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-3 h-3 text-neutral-600" />
+                <span className="font-mono text-3xs text-pink-300 bg-pink-500/10 px-1.5 py-0.5 rounded">Audit Trail Record</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Synced Calls Table */}
+          <div className="panel bg-bg-card border border-bg-border overflow-hidden">
+            <div className="p-3.5 border-b border-bg-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-text-primary">Synchronized AI Voice Sessions</span>
+                <span className="badge badge-secondary text-3xs font-mono">{syncedVoiceCalls.length} synced</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleBatchSyncAllVoiceCalls}
+                  className="btn-secondary text-2xs py-1 px-2.5 gap-1"
+                >
+                  <RefreshCw className="w-3 h-3 text-amber-400" /> Refresh / Re-Sync
+                </button>
+              </div>
+            </div>
+
+            {syncedVoiceCalls.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                  <Phone className="w-6 h-6" />
+                </div>
+                <div className="max-w-md mx-auto">
+                  <h3 className="text-xs font-bold text-text-primary">No Voice Calls Synced to CRM Yet</h3>
+                  <p className="text-2xs text-text-secondary mt-1">
+                    When you run live calls in the AI Voice Agent studio or Phone Simulator, completed calls are automatically analyzed and synchronized right here.
+                  </p>
+                </div>
+                <button
+                  onClick={handleBatchSyncAllVoiceCalls}
+                  className="btn-primary text-2xs py-1.5 px-3.5 gap-1.5 mx-auto"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Generate Seed Synced Calls for Demonstration
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-neutral-900/60 text-text-muted border-b border-bg-border text-2xs">
+                    <tr>
+                      <th className="py-2.5 px-3.5 text-left font-medium">Prospect & Organization</th>
+                      <th className="py-2.5 px-3.5 text-left font-medium">Qualification & Score</th>
+                      <th className="py-2.5 px-3.5 text-left font-medium">Sentiment</th>
+                      <th className="py-2.5 px-3.5 text-left font-medium">Talk Time</th>
+                      <th className="py-2.5 px-3.5 text-left font-medium">Target CRM</th>
+                      <th className="py-2.5 px-3.5 text-left font-medium">Sync Time</th>
+                      <th className="py-2.5 px-3.5 text-right font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-bg-border">
+                    {syncedVoiceCalls.map(item => {
+                      const verdict = item.qualification === 'QUALIFIED' ? 'HOT' : item.qualification || 'WARM'
+                      const score = item.intentScore || 75
+                      return (
+                        <tr key={item.id} className="hover:bg-neutral-900/30 transition-colors">
+                          <td className="py-3 px-3.5">
+                            <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                              <User className="w-3 h-3 text-text-muted" />
+                              {item.prospectName}
+                            </div>
+                            <div className="text-3xs text-text-muted mt-0.5">
+                              {item.company || 'Unknown Company'} • {item.phone || 'No phone'}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3.5">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`text-3xs px-1.5 py-0.5 rounded font-mono font-bold ${
+                                  verdict === 'HOT'
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                    : verdict === 'WARM'
+                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                                    : 'bg-neutral-800 text-text-muted border border-neutral-700'
+                                }`}
+                              >
+                                {verdict}
+                              </span>
+                              <span className="font-mono text-2xs text-text-secondary">
+                                {score}/100
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3.5">
+                            <span
+                              className={`text-3xs px-1.5 py-0.5 rounded ${
+                                item.sentiment === 'POSITIVE' || item.sentiment === 'Interested'
+                                  ? 'bg-emerald-500/10 text-emerald-300'
+                                  : item.sentiment === 'NEGATIVE'
+                                  ? 'bg-red-500/10 text-red-300'
+                                  : 'bg-neutral-800 text-text-secondary'
+                              }`}
+                            >
+                              {item.sentiment || 'Neutral'}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3.5 font-mono text-2xs text-text-secondary">
+                            {formatDuration(item.durationSeconds || 0)}
+                          </td>
+
+                          <td className="py-3 px-3.5">
+                            <span className="badge badge-success text-3xs font-mono flex items-center gap-1 w-fit">
+                              <CheckCircle className="w-3 h-3 text-emerald-400" />
+                              {(item.targetCrmName || item.targetCrmId || 'CRM').toUpperCase()}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3.5 text-2xs text-text-muted font-mono whitespace-nowrap">
+                            {timeAgo(item.syncedAt)}
+                          </td>
+
+                          <td className="py-3 px-3.5 text-right">
+                            <button
+                              onClick={() => setSelectedVoiceCallDetail(item)}
+                              className="btn-secondary text-2xs py-1 px-2.5 gap-1 hover:border-amber-500/50"
+                            >
+                              <ExternalLink className="w-3 h-3 text-amber-400" /> Inspect Payload
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1336,6 +1773,154 @@ export function CRM() {
               </pre>
               <div className="flex justify-end pt-2">
                 <button onClick={() => setSelectedLogPayload(null)} className="btn-secondary text-xs">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inspect Synced Voice Call Intelligence Modal */}
+      {selectedVoiceCallDetail && (
+        <div className="modal-overlay" onClick={() => setSelectedVoiceCallDetail(null)}>
+          <div className="modal-panel max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="section-header">
+              <div className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-amber-400" />
+                <span className="section-title">
+                  CRM Intelligence Sync: {selectedVoiceCallDetail.prospectName}
+                </span>
+              </div>
+              <button onClick={() => setSelectedVoiceCallDetail(null)}>
+                <XCircle className="w-4 h-4 text-text-muted hover:text-text-primary" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              {/* Status Header */}
+              <div className="p-3.5 bg-neutral-900/80 border border-neutral-800 rounded-lg flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-text-primary">
+                    {selectedVoiceCallDetail.prospectName}
+                  </div>
+                  <div className="text-2xs text-text-muted font-mono mt-0.5">
+                    {selectedVoiceCallDetail.company || 'Enterprise Prospect'} • {selectedVoiceCallDetail.phone || 'No phone'}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="badge badge-success text-2xs font-mono flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    Synced to {(selectedVoiceCallDetail.targetCrmName || selectedVoiceCallDetail.targetCrmId || 'CRM').toUpperCase()}
+                  </span>
+                  <span className="text-3xs text-text-muted font-mono">
+                    {formatDateTime(selectedVoiceCallDetail.syncedAt)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Gemini Intelligence Summary */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="p-3 bg-bg-card border border-bg-border rounded-lg">
+                  <div className="text-3xs text-text-muted uppercase">Qualification Verdict</div>
+                  <div className="text-base font-bold text-amber-400 mt-1 font-mono">
+                    {selectedVoiceCallDetail.qualification || 'HOT'}
+                  </div>
+                  <div className="text-3xs text-text-muted">Intent Score: {selectedVoiceCallDetail.intentScore || 85}/100</div>
+                </div>
+
+                <div className="p-3 bg-bg-card border border-bg-border rounded-lg">
+                  <div className="text-3xs text-text-muted uppercase">Detected Sentiment</div>
+                  <div className="text-base font-bold text-emerald-400 mt-1">
+                    {selectedVoiceCallDetail.sentiment || 'Positive'}
+                  </div>
+                  <div className="text-3xs text-text-muted">Duration: {formatDuration(selectedVoiceCallDetail.durationSeconds || 0)}</div>
+                </div>
+
+                <div className="p-3 bg-bg-card border border-bg-border rounded-lg">
+                  <div className="text-3xs text-text-muted uppercase">Lead State</div>
+                  <div className="text-base font-bold text-blue-400 mt-1">Active Deal</div>
+                  <div className="text-3xs text-text-muted">Auto-Updated in CRM</div>
+                </div>
+              </div>
+
+              {/* Summary & Next Action */}
+              {selectedVoiceCallDetail.summary && (
+                <div className="space-y-1.5">
+                  <label className="text-2xs font-semibold text-text-secondary uppercase tracking-wider block">
+                    Gemini Executive Summary
+                  </label>
+                  <p className="p-3 bg-neutral-900/60 border border-neutral-800 rounded-lg text-text-primary leading-relaxed text-2xs">
+                    {selectedVoiceCallDetail.summary}
+                  </p>
+                </div>
+              )}
+
+              {selectedVoiceCallDetail.nextBestAction && (
+                <div className="space-y-1.5">
+                  <label className="text-2xs font-semibold text-amber-400 uppercase tracking-wider block flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" /> Next Best Action Pushed to CRM Task
+                  </label>
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-200 text-2xs font-medium">
+                    {selectedVoiceCallDetail.nextBestAction}
+                  </div>
+                </div>
+              )}
+
+              {/* Audio Transcript */}
+              {selectedVoiceCallDetail.transcript && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-2xs font-semibold text-text-secondary uppercase tracking-wider block">
+                      Synchronized Call Transcript
+                    </label>
+                    <span className="text-3xs font-mono text-text-muted">Full Two-Way Audio Log</span>
+                  </div>
+                  <pre className="p-3 bg-neutral-950 border border-neutral-800 rounded-lg font-mono text-2xs text-text-secondary overflow-x-auto whitespace-pre-wrap max-h-48 leading-relaxed">
+                    {typeof selectedVoiceCallDetail.transcript === 'string'
+                      ? selectedVoiceCallDetail.transcript
+                      : selectedVoiceCallDetail.transcript.map(t => `${t.speaker}: ${t.text}`).join('\n')}
+                  </pre>
+                </div>
+              )}
+
+              {/* Raw JSON Payload */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-2xs font-semibold text-text-muted uppercase tracking-wider block">
+                    Raw CRM Encrypted Payload & Wire Telemetry
+                  </label>
+                  <button
+                    onClick={() => copyToClipboard(JSON.stringify(selectedVoiceCallDetail, null, 2), 'crm_call_payload')}
+                    className="btn-secondary text-3xs py-0.5 px-2 gap-1 font-mono"
+                  >
+                    {copiedCode === 'crm_call_payload' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    Copy JSON
+                  </button>
+                </div>
+                <pre className="p-3 bg-neutral-950 border border-neutral-800 rounded-lg font-mono text-3xs text-emerald-400 overflow-x-auto max-h-40 whitespace-pre-wrap">
+                  {JSON.stringify(selectedVoiceCallDetail, null, 2)}
+                </pre>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-bg-border">
+                <span className="text-3xs text-text-muted">
+                  Cryptographically hashed and audit logged in Callisto Enterprise Ledger.
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      await syncVoiceCallToCrm(selectedVoiceCallDetail, { force: true })
+                      setSyncedVoiceCalls(loadSyncedVoiceCalls())
+                      showToast('success', 'Re-Synced', `Pushed fresh update to ${(selectedVoiceCallDetail.targetCrmName || selectedVoiceCallDetail.targetCrmId || 'CRM').toUpperCase()}`)
+                    }}
+                    className="btn-primary text-xs py-1.5 px-3 gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Re-Push to CRM
+                  </button>
+                  <button onClick={() => setSelectedVoiceCallDetail(null)} className="btn-secondary text-xs">
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>

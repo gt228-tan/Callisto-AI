@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "server": "cd server && npm run dev",
+    "voice": "cd server && npm run voice:dev",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

@@ -101,6 +101,9 @@ interface AppContextValue {
   setMobileNavOpen: (v: boolean) => void
   deviceMode: 'desktop' | 'android' | 'ios'
   setDeviceMode: (mode: 'desktop' | 'android' | 'ios') => void
+  theme: 'dark' | 'light'
+  setTheme: (t: 'dark' | 'light') => void
+  toggleTheme: () => void
   businessProfile: BusinessProfile
   updateBusinessProfile: (profile: Partial<BusinessProfile>) => void
 }
@@ -113,6 +116,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'android' | 'ios'>('desktop')
+  const [theme, setThemeState] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('callisto_theme')
+      if (saved === 'light' || saved === 'dark') return saved
+    }
+    return 'dark'
+  })
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (theme === 'light') {
+      root.classList.add('light')
+      root.classList.remove('dark')
+      root.setAttribute('data-theme', 'light')
+      root.style.colorScheme = 'light'
+    } else {
+      root.classList.add('dark')
+      root.classList.remove('light')
+      root.setAttribute('data-theme', 'dark')
+      root.style.colorScheme = 'dark'
+    }
+    try {
+      localStorage.setItem('callisto_theme', theme)
+    } catch {}
+  }, [theme])
+
+  const setTheme = useCallback((t: 'dark' | 'light') => {
+    setThemeState(t)
+  }, [])
+
+  const toggleTheme = useCallback(() => {
+    setThemeState(prev => (prev === 'dark' ? 'light' : 'dark'))
+  }, [])
 
   const [businessProfile, setBusinessProfileState] = useState<BusinessProfile>(() => {
     if (typeof window !== 'undefined') {
@@ -156,6 +192,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       globalSearchOpen, setGlobalSearchOpen,
       mobileNavOpen, setMobileNavOpen,
       deviceMode, setDeviceMode,
+      theme, setTheme, toggleTheme,
       businessProfile, updateBusinessProfile,
     }}>
       {children}

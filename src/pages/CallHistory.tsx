@@ -1,15 +1,18 @@
 import { useState } from 'react'
-import { ScrollText, Download, Filter, X } from 'lucide-react'
+import { ScrollText, Download, Filter, X, Link2, RefreshCw, Check, Calendar } from 'lucide-react'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { outcomeBadge } from '@/components/ui/StatusBadge'
 import { calls, type Call } from '@/data/calls'
 import { formatDateTime, formatDuration, formatTimestamp } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
 import { exportToCSV } from '@/lib/exportCsv'
+import { syncVoiceCallToCrm, syncBatchVoiceCallsToCrm, syncActivityToCrm, loadCrms } from '@/services/crmService'
 
 export function CallHistory() {
   const { showToast } = useToast()
   const [selectedCall, setSelectedCall] = useState<Call | null>(null)
+  const [isSyncingAll, setIsSyncingAll] = useState(false)
+  const [syncedCallsSet, setSyncedCallsSet] = useState<Set<string>>(new Set(['C001', 'C002', 'C004']))
 
   function handleExportCalls() {
     exportToCSV('call_history.csv', calls, [
@@ -60,19 +63,109 @@ export function CallHistory() {
       )
       : <span className="text-text-muted text-2xs">—</span>
     },
+    { key: 'crm', header: 'CRM Sync', render: r => {
+      const isSynced = syncedCallsSet.has(r.id)
+      return isSynced ? (
+        <span className="badge-success text-3xs py-0.5 px-1.5 font-mono flex items-center gap-1 w-fit">
+          <Check className="w-2.5 h-2.5" /> Synced
+        </span>
+      ) : (
+        <button
+          onClick={async (e) => {
+            e.stopPropagation()
+            try {
+              const res = await syncVoiceCallToCrm({
+                callId: r.id,
+                prospectName: r.prospect,
+                company: r.company,
+                phone: (r as any).phone,
+                agentName: r.agent,
+                durationSeconds: r.duration,
+                outcome: r.outcome,
+                sentiment: r.sentiment,
+                qualification: r.qualification,
+                intentScore: r.intent === 'HIGH' ? 92 : r.intent === 'MEDIUM' ? 78 : 55,
+                summary: r.summary || `Call completed with ${r.prospect}`,
+                nextBestAction: r.nextBestAction || 'Follow up with technical demo',
+                buyingSignals: r.buyingSignals || [],
+                objections: r.objections || [],
+                transcript: r.transcript,
+              }, { force: true })
+              setSyncedCallsSet(prev => new Set([...prev, r.id]))
+              showToast('success', 'Synced to CRM', `${r.prospect} (${r.company}) pushed into ${res.crmName}`)
+            } catch {
+              showToast('error', 'Sync Failed', 'Could not sync call to CRM')
+            }
+          }}
+          className="badge-amber text-3xs py-0.5 px-1.5 font-mono hover:bg-amber-500/20 cursor-pointer flex items-center gap-1 w-fit"
+          title="Push to CRM"
+        >
+          <Link2 className="w-2.5 h-2.5" /> Sync CRM
+        </button>
+      )
+    }},
   ]
 
   return (
-    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <ScrollText className="w-4 h-4 text-amber-400 shrink-0" />
-          <h1 className="text-sm font-bold text-text-primary">Call History</h1>
-          <span className="text-2xs text-text-muted">({calls.length} calls)</span>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-bg-border/60">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <ScrollText className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base sm:text-lg font-bold text-text-primary tracking-tight">Call History & Recordings</h1>
+              <span className="text-2xs text-text-muted font-mono">({calls.length} calls)</span>
+              <span className="badge-success text-3xs font-mono hidden sm:inline-flex items-center gap-1">
+                <Link2 className="w-2.5 h-2.5" /> CRM SYNC ACTIVE
+              </span>
+            </div>
+            <p className="text-2xs text-text-muted font-mono hidden sm:block">Full audio transcripts, buyer intent signals & CRM sync audit logs</p>
+          </div>
         </div>
-        <button onClick={handleExportCalls} className="btn-secondary text-xs gap-1.5 w-full sm:w-auto justify-center">
-          <Download className="w-3.5 h-3.5" /> Export CSV
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={async () => {
+              setIsSyncingAll(true)
+              showToast('info', 'Batch Syncing Calls', 'Pushing call records to connected CRM...')
+              try {
+                const payloads = calls.map(r => ({
+                  callId: r.id,
+                  prospectName: r.prospect,
+                  company: r.company,
+                  phone: (r as any).phone,
+                  agentName: r.agent,
+                  durationSeconds: r.duration,
+                  outcome: r.outcome,
+                  sentiment: r.sentiment,
+                  qualification: r.qualification,
+                  intentScore: r.intent === 'HIGH' ? 92 : r.intent === 'MEDIUM' ? 78 : 55,
+                  summary: r.summary || `Call completed with ${r.prospect}`,
+                  nextBestAction: r.nextBestAction || 'Follow up with technical demo',
+                  buyingSignals: r.buyingSignals || [],
+                  objections: r.objections || [],
+                  transcript: r.transcript,
+                }))
+                const res = await syncBatchVoiceCallsToCrm(payloads)
+                setSyncedCallsSet(new Set(calls.map(c => c.id)))
+                showToast('success', 'Batch Sync Complete', `All ${res.count} call recordings and intelligence pushed to ${res.crmName}`)
+              } catch {
+                showToast('error', 'Sync Failed', 'Could not batch sync calls')
+              } finally {
+                setIsSyncingAll(false)
+              }
+            }}
+            disabled={isSyncingAll}
+            className="btn-primary text-xs py-1.5 px-3 gap-1.5 flex-1 sm:flex-initial justify-center font-semibold"
+          >
+            {isSyncingAll ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+            {isSyncingAll ? 'Syncing...' : 'Sync All Calls to CRM'}
+          </button>
+          <button onClick={handleExportCalls} className="btn-secondary text-xs py-1.5 px-3 gap-1.5 flex-1 sm:flex-initial justify-center">
+            <Download className="w-3.5 h-3.5" /> Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -173,18 +266,71 @@ export function CallHistory() {
                 )}
 
                 <div className="space-y-1.5 pt-2 border-t border-bg-border">
-                  {['Schedule Follow-up Meeting', 'Export Call Record', 'Add CRM Note'].map(a => (
-                    <button
-                      key={a}
-                      onClick={() => {
-                        showToast('success', a, `Action saved for call with ${selectedCall.prospect}`)
-                        setSelectedCall(null)
-                      }}
-                      className="w-full btn-secondary text-2xs py-1"
-                    >
-                      {a}
-                    </button>
-                  ))}
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await syncVoiceCallToCrm({
+                          callId: selectedCall.id,
+                          prospectName: selectedCall.prospect,
+                          company: selectedCall.company,
+                          phone: (selectedCall as any).phone,
+                          agentName: selectedCall.agent,
+                          durationSeconds: selectedCall.duration,
+                          outcome: selectedCall.outcome,
+                          sentiment: selectedCall.sentiment,
+                          qualification: selectedCall.qualification,
+                          intentScore: selectedCall.intent === 'HIGH' ? 94 : 80,
+                          summary: selectedCall.summary || `Call completed with ${selectedCall.prospect}`,
+                          nextBestAction: selectedCall.nextBestAction || 'Follow up with technical proposal',
+                          buyingSignals: selectedCall.buyingSignals || [],
+                          objections: selectedCall.objections || [],
+                          transcript: selectedCall.transcript,
+                        }, { force: true })
+                        setSyncedCallsSet(prev => new Set([...prev, selectedCall.id]))
+                        showToast('success', 'Synced to CRM', `Recording & transcript pushed to ${res.crmName} Contact timeline`)
+                      } catch {
+                        showToast('error', 'Sync Failed', 'Could not sync call to CRM')
+                      }
+                    }}
+                    className="w-full btn-primary text-2xs py-1.5 flex items-center justify-center gap-1 font-semibold"
+                  >
+                    <Link2 className="w-3 h-3" /> Sync Call to CRM ({syncedCallsSet.has(selectedCall.id) ? 'Re-Sync' : 'Push'})
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      await syncActivityToCrm({
+                        type: 'CALENDLY_MEETING',
+                        title: `Follow-up Meeting: ${selectedCall.prospect}`,
+                        prospectName: selectedCall.prospect,
+                        company: selectedCall.company,
+                        details: `Follow-up demo scheduled from call record. Next Action: ${selectedCall.nextBestAction}`,
+                        score: 90,
+                      })
+                      showToast('success', 'Meeting Scheduled & Synced', `Follow-up meeting calendar task created in CRM`)
+                    }}
+                    className="w-full btn-secondary text-2xs py-1.5 flex items-center justify-center gap-1"
+                  >
+                    <Calendar className="w-3 h-3 text-amber-400" /> Schedule CRM Follow-up Meeting
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      exportToCSV(`call_${selectedCall.prospect.replace(/\s+/g, '_')}.csv`, [selectedCall], [
+                        { key: 'prospect', label: 'Prospect' },
+                        { key: 'company', label: 'Company' },
+                        { key: 'agent', label: 'Agent' },
+                        { key: 'duration', label: 'Duration' },
+                        { key: 'outcome', label: 'Outcome' },
+                        { key: 'sentiment', label: 'Sentiment' },
+                        { key: 'summary', label: 'Summary' },
+                      ])
+                      showToast('success', 'Exported', `Call record downloaded for ${selectedCall.prospect}`)
+                    }}
+                    className="w-full btn-secondary text-2xs py-1.5 flex items-center justify-center gap-1 text-text-muted"
+                  >
+                    <Download className="w-3 h-3" /> Export Call Record
+                  </button>
                 </div>
               </div>
             </div>

@@ -31,14 +31,19 @@ export function MarketIntelligence() {
   const { showToast } = useToast()
 
   return (
-    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-      <div className="flex items-center gap-2">
-        <TrendingUp className="w-4 h-4 text-amber-400 shrink-0" />
-        <h1 className="text-sm font-bold text-text-primary">Market Intelligence</h1>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
+      <div className="flex items-center gap-2.5 pb-2 border-b border-bg-border/60">
+        <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+          <TrendingUp className="w-4 h-4" />
+        </div>
+        <div>
+          <h1 className="text-base sm:text-lg font-bold text-text-primary tracking-tight">Market Intelligence & Signal Recon</h1>
+          <p className="text-2xs text-text-muted font-mono hidden sm:block">Macro market signals, tech stack migrations, hiring intent & venture funding</p>
+        </div>
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 sm:gap-6">
         {/* Hiring Trends */}
         <div className="panel">
           <div className="section-header"><span className="section-title">AI Hiring Trends — By Role</span></div>

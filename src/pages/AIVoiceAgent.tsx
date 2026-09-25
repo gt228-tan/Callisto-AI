@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   PhoneCall, Phone, Circle, X, Calendar, Server,
@@ -6,7 +6,9 @@ import {
   Mic, ArrowRight, User, FastForward, RotateCcw,
   Zap, PhoneOff, Send, MessageSquare, ShieldCheck,
   PhoneIncoming, PhoneOutgoing, Voicemail, Clock,
-  HelpCircle, Check, MessageCircle, FileText
+  HelpCircle, Check, MessageCircle, FileText,
+  Link2, RefreshCw, AlertTriangle, UserCheck, Smartphone, ExternalLink,
+  PhoneForwarded, Radio, Mail
 } from 'lucide-react'
 import { MetricCard } from '@/components/ui/MetricCard'
 import { calls, type Call } from '@/data/calls'
@@ -113,6 +115,40 @@ import {
   type CallAnalysisResult,
   DISPLAY_ENGINE_LABEL
 } from '@/services/geminiService'
+import {
+  startMicRecognition,
+  stopMicRecognition,
+  speakText,
+  cancelSpeech,
+  toVoiceLanguage,
+  isSpeechRecognitionSupported,
+} from '@/services/voiceEngine'
+import { callHistoryStore } from '@/services/callHistoryStore'
+import {
+  detectHumanTransferIntent,
+  sendCalendlySms,
+  sendCalendlyEmail,
+  sendCalendlyDispatch,
+  buildCalendlyEmail,
+  getCalendlyBookings,
+  getCalendlyStats,
+  scheduleFollowUpCall,
+  simulateCalendlyEvent,
+  getCustomCalendlyLink,
+  setCustomCalendlyLink,
+  type CalendlyBookingRecord,
+} from '@/services/calendlyService'
+import { PhoneCallPanel } from '@/components/voice/PhoneCallPanel'
+import { getGeminiApiKey } from '@/services/geminiService'
+import {
+  syncVoiceCallToCrm,
+  syncActivityToCrm,
+  loadVoiceAgentCrmConfig,
+  saveVoiceAgentCrmConfig,
+  loadCrms,
+  type CRMIntegration,
+  type VoiceAgentCrmConfig,
+} from '@/services/crmService'
 
 export function AIVoiceAgent() {
   const { showToast } = useToast()
@@ -123,11 +159,13 @@ export function AIVoiceAgent() {
 
   // Context leads for seamless integration with other pages
   let leadsList: Lead[] = leads
+  let updateLeadFn: ((id: string, updates: Partial<Lead>) => void) | undefined
   try {
     const leadsCtx = useLeads()
     if (leadsCtx && leadsCtx.leadsList && leadsCtx.leadsList.length > 0) {
       leadsList = leadsCtx.leadsList
     }
+    updateLeadFn = leadsCtx?.updateLead
   } catch {
     leadsList = leads
   }
@@ -163,6 +201,41 @@ export function AIVoiceAgent() {
   const [showDemoModal, setShowDemoModal] = useState<boolean>(false)
   const [selectedProspectForDemo, setSelectedProspectForDemo] = useState<any>(null)
 
+  // Calendly Mail / SMS Dispatch & Human-Transfer state
+  const [showCalendlySmsModal, setShowCalendlySmsModal] = useState<boolean>(false)
+  const [calendlySmsSending, setCalendlySmsSending] = useState<boolean>(false)
+  const [calendlySmsSent, setCalendlySmsSent] = useState<boolean>(false)
+  const [calendlyDispatchChannel, setCalendlyDispatchChannel] = useState<'EMAIL' | 'SMS' | 'BOTH'>('EMAIL')
+  const [lastDispatchedChannel, setLastDispatchedChannel] = useState<'EMAIL' | 'SMS' | 'BOTH'>('EMAIL')
+  const [humanTransferDetected, setHumanTransferDetected] = useState<boolean>(false)
+  const [calendlyBookings, setCalendlyBookings] = useState<CalendlyBookingRecord[]>(() => getCalendlyBookings())
+  const [calendlyStats, setCalendlyStats] = useState(() => getCalendlyStats())
+  const [showCalendlyTracker, setShowCalendlyTracker] = useState<boolean>(false)
+  const [followUpModal, setFollowUpModal] = useState<{ open: boolean; recordId: string; leadName: string }>({ open: false, recordId: '', leadName: '' })
+  const [customCalendlyUrl, setCustomCalendlyUrl] = useState<string>(() => getCustomCalendlyLink())
+  const [isEditingCalendlyUrl, setIsEditingCalendlyUrl] = useState<boolean>(false)
+  const [calendlyUrlInput, setCalendlyUrlInput] = useState<string>(() => getCustomCalendlyLink())
+
+  // Prospect Contact details (Phone & Mail) - editable with persistent memory
+  const [prospectPhone, setProspectPhone] = useState<string>(() => {
+    const saved = localStorage.getItem('callisto_phone_' + initialProspectName)
+    if (saved) return saved
+    const match = leadsList.find(l => l.name === initialProspectName)
+    if (match?.phone && match.phone !== '+91 98XXX XXXXX') return match.phone
+    return '+91 98201 44892'
+  })
+  const [isEditingPhone, setIsEditingPhone] = useState<boolean>(false)
+  const [phoneInput, setPhoneInput] = useState<string>(prospectPhone)
+
+  const [prospectEmail, setProspectEmail] = useState<string>(() => {
+    const saved = localStorage.getItem('callisto_email_' + initialProspectName)
+    if (saved) return saved
+    return 'tanishqgt32@gmail.com'
+  })
+  const [isEditingEmail, setIsEditingEmail] = useState<boolean>(false)
+  const [emailInput, setEmailInput] = useState<string>(prospectEmail)
+
+
   // Interactive Gemini Call Studio State
   const [geminiEnabled, setGeminiEnabled] = useState(true)
   const [prospectName, setProspectName] = useState(initialProspectName)
@@ -173,6 +246,12 @@ export function AIVoiceAgent() {
   const [speechActive, setSpeechActive] = useState(false)
   const [userInput, setUserInput] = useState('')
   const [isAiResponding, setIsAiResponding] = useState(false)
+
+  // Microphone / voice input state
+  const [micActive, setMicActive] = useState(false)
+  const [interimText, setInterimText] = useState('')   // live streamed partial words
+  const [micError, setMicError] = useState<string | null>(null)
+  const micEnabledRef = useRef(false)                  // tracks if mic should be running
 
   // Clean agent name
   const cleanAgentName = agentName.replace(/\s*\(.*\)/, '').trim() || agentName.trim() || 'Aria'
@@ -189,6 +268,16 @@ export function AIVoiceAgent() {
   // Call Analysis state matching Screenshot 4
   const [analysisResult, setAnalysisResult] = useState<CallAnalysisResult | null>(null)
 
+  // CRM Sync State & Configuration
+  const [crmConfig, setCrmConfig] = useState<VoiceAgentCrmConfig>(loadVoiceAgentCrmConfig)
+  const [availableCrms] = useState<CRMIntegration[]>(loadCrms)
+  const [isSyncingCrm, setIsSyncingCrm] = useState(false)
+  const [lastSyncedCrmName, setLastSyncedCrmName] = useState<string | null>('Salesforce CRM')
+  const [syncedProspectMap, setSyncedProspectMap] = useState<Record<string, { crmName: string; time: string }>>({
+    'IP-1': { crmName: 'Salesforce CRM', time: '12m ago' },
+    'IP-2': { crmName: 'Salesforce CRM', time: '34m ago' },
+  })
+
   const callTimerRef = useRef<number | null>(null)
   const transcriptContainerRef = useRef<HTMLDivElement | null>(null)
   const lastSpokenTextRef = useRef<string>('')
@@ -203,6 +292,48 @@ export function AIVoiceAgent() {
       }
     }
   }, [leadParam, leadsList])
+
+  // Sync phone and email when prospectName changes
+  useEffect(() => {
+    const savedPhone = localStorage.getItem('callisto_phone_' + prospectName)
+    const match = leadsList.find(l => l.name === prospectName)
+    const effectivePhone = savedPhone || (match?.phone && match.phone !== '+91 98XXX XXXXX' ? match.phone : '+91 98201 44892')
+    setProspectPhone(effectivePhone)
+    setPhoneInput(effectivePhone)
+
+    const savedEmail = localStorage.getItem('callisto_email_' + prospectName)
+    const effectiveEmail = savedEmail || 'tanishqgt32@gmail.com'
+    setProspectEmail(effectiveEmail)
+    setEmailInput(effectiveEmail)
+  }, [prospectName, leadsList])
+
+  function handleSavePhone() {
+    const trimmed = phoneInput.trim()
+    if (trimmed) {
+      setProspectPhone(trimmed)
+      localStorage.setItem('callisto_phone_' + prospectName, trimmed)
+      const match = leadsList.find(l => l.name === prospectName)
+      if (match && updateLeadFn) {
+        updateLeadFn(match.id, { phone: trimmed })
+      }
+      showToast('success', 'Phone Number Updated', `Contact number set to ${trimmed}`)
+    }
+    setIsEditingPhone(false)
+  }
+
+  function handleSaveEmail() {
+    const trimmed = emailInput.trim()
+    if (trimmed) {
+      setProspectEmail(trimmed)
+      localStorage.setItem('callisto_email_' + prospectName, trimmed)
+      const match = leadsList.find(l => l.name === prospectName)
+      if (match && updateLeadFn) {
+        updateLeadFn(match.id, { email: trimmed })
+      }
+      showToast('success', 'Mail Address Updated', `Address set to ${trimmed}`)
+    }
+    setIsEditingEmail(false)
+  }
 
   // Call duration timer
   useEffect(() => {
@@ -225,39 +356,69 @@ export function AIVoiceAgent() {
     }
   }, [transcript, isAiResponding])
 
-  // Speech synthesis function
-  function speakTurn(text: string, onComplete?: () => void) {
+  // ── Speech synthesis (delegates to voiceEngine) ────────────────────────────
+  async function speakTurn(text: string, onComplete?: () => void) {
     lastSpokenTextRef.current = text
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      try {
-        window.speechSynthesis.cancel()
-        const utterance = new SpeechSynthesisUtterance(text)
-        if (simLanguage === 'Hindi') utterance.lang = 'hi-IN'
-        else if (simLanguage === 'Gujarati') utterance.lang = 'gu-IN'
-        else utterance.lang = 'en-US'
-
-        utterance.rate = 1.02
-        utterance.pitch = 1.0
-
-        utterance.onstart = () => setSpeechActive(true)
-        utterance.onend = () => {
-          setSpeechActive(false)
-          onComplete?.()
-        }
-        utterance.onerror = () => {
-          setSpeechActive(false)
-          onComplete?.()
-        }
-
-        window.speechSynthesis.speak(utterance)
-      } catch (err) {
+    setSpeechActive(true)
+    // Pause mic while AI speaks to avoid feedback loop
+    if (micEnabledRef.current) stopMicRecognition()
+    await speakText(text, toVoiceLanguage(simLanguage), {
+      onStart: () => setSpeechActive(true),
+      onEnd: () => {
         setSpeechActive(false)
+        // Restart mic after AI finishes speaking
+        if (micEnabledRef.current) startMic()
         onComplete?.()
       }
-    } else {
-      onComplete?.()
-    }
+    })
   }
+
+  // ── Start microphone ────────────────────────────────────────────────────────
+  function startMic() {
+    if (!isSpeechRecognitionSupported()) {
+      setMicError('Speech recognition not supported in this browser. Use Chrome or Edge.')
+      return
+    }
+    setMicError(null)
+    setMicActive(true)
+    startMicRecognition(toVoiceLanguage(simLanguage), {
+      onStart: () => setMicActive(true),
+      onInterim: (text) => setInterimText(text),
+      onFinal: (text) => {
+        setInterimText('')
+        // Auto-send the spoken text as prospect message
+        if (text.trim()) handleSendMessage(text.trim())
+      },
+      onDisconnect: () => {
+        // Prospect said "disconnect" / "end call" — hang up
+        setMicActive(false)
+        micEnabledRef.current = false
+        stopMicRecognition()
+        handleEndCallAndAnalyze()
+      },
+      onError: (err) => {
+        if (!err.includes('no-speech')) setMicError(err)
+      },
+      onStop: () => setMicActive(false),
+    })
+  }
+
+  // ── Stop microphone ─────────────────────────────────────────────────────────
+  function stopMic() {
+    micEnabledRef.current = false
+    stopMicRecognition()
+    setMicActive(false)
+    setInterimText('')
+  }
+
+  // Cleanup microphone and speech on unmount
+  useEffect(() => {
+    return () => {
+      micEnabledRef.current = false
+      stopMicRecognition()
+      cancelSpeech()
+    }
+  }, [])
 
   // Format seconds into "0m 37s" or "2m 25s" matching screenshots
   function formatStudioDuration(seconds: number): string {
@@ -273,6 +434,82 @@ export function AIVoiceAgent() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
+  // Refresh calendly bookings from store
+  const refreshCalendlyData = useCallback(() => {
+    setCalendlyBookings(getCalendlyBookings())
+    setCalendlyStats(getCalendlyStats())
+  }, [])
+
+  // Handle sending Calendly Link via Email, SMS, or Both to current prospect
+  async function handleSendCalendlyDispatch() {
+    setCalendlySmsSending(true)
+    const effectivePhone = prospectPhone.trim() || '+91 98201 44892'
+    const effectiveEmail = prospectEmail.trim() || 'tanishqgt32@gmail.com'
+    const prospectMatch = leadsList.find(l => l.name === prospectName)
+    const company = prospectMatch?.company || businessProfile.companyName || 'Enterprise'
+
+    try {
+      await sendCalendlyDispatch({
+        channel: calendlyDispatchChannel,
+        prospectName,
+        prospectPhone: effectivePhone,
+        prospectEmail: effectiveEmail,
+        company,
+        agentName: cleanAgentName,
+        companyName: businessProfile.companyName || 'Callisto AI Solutions',
+        triggeredBy: 'HUMAN_TRANSFER_REQUEST',
+        calendlyLink: customCalendlyUrl,
+      })
+      setCalendlySmsSent(true)
+      setLastDispatchedChannel(calendlyDispatchChannel)
+      refreshCalendlyData()
+
+      // Add AI transcript turn acknowledging the dispatch
+      let aiText = ''
+      let tag = ''
+      if (calendlyDispatchChannel === 'EMAIL') {
+        aiText = `Absolutely! I've just sent an email with our Calendly booking link to ${effectiveEmail}. All meeting slots are pre-approved, and our senior engineering team will confirm as soon as you select a time. Is there anything else you'd like to discuss?`
+        tag = `[✉️ Calendly Link Emailed to ${effectiveEmail}]`
+      } else if (calendlyDispatchChannel === 'SMS') {
+        aiText = `Absolutely! I've just sent you a text message with a direct Calendly link to ${effectivePhone}. Once you book, our team will confirm within minutes. Is there anything else I can help you with in the meantime?`
+        tag = `[📱 Calendly SMS Dispatched via Twilio to ${effectivePhone}]`
+      } else {
+        aiText = `Done! I've sent the Calendly booking link to both your email ${effectiveEmail} and your phone ${effectivePhone}. You can reserve any convenient slot instantly!`
+        tag = `[🚀 Calendly Link Dispatched via Mail (${effectiveEmail}) & SMS (${effectivePhone})]`
+      }
+
+      const aiTime = formatTurnTime(callDurationSec + 3)
+      setTranscript(prev => [
+        ...prev,
+        { speaker: 'AI', text: `${tag} ${aiText}`, time: aiTime, isGemini: true }
+      ])
+      speakTurn(aiText)
+
+      const toastTitle =
+        calendlyDispatchChannel === 'EMAIL'
+          ? 'Calendly Link Emailed'
+          : calendlyDispatchChannel === 'SMS'
+          ? 'Calendly SMS Dispatched'
+          : 'Calendly Link Dispatched'
+      const toastDesc =
+        calendlyDispatchChannel === 'EMAIL'
+          ? `Dispatched to ${effectiveEmail}`
+          : calendlyDispatchChannel === 'SMS'
+          ? `Dispatched to ${effectivePhone}`
+          : `Dispatched to ${effectiveEmail} & ${effectivePhone}`
+      showToast('success', toastTitle, toastDesc)
+    } catch {
+      showToast('info', 'Dispatch Recorded', 'Calendly link recorded and added to Booking Tracker')
+      setCalendlySmsSent(true)
+      setLastDispatchedChannel(calendlyDispatchChannel)
+      refreshCalendlyData()
+    }
+    setCalendlySmsSending(false)
+  }
+
+  // Backward-compatibility alias
+  const handleSendCalendlySms = handleSendCalendlyDispatch
+
   // Send prospect message and trigger Gemini AI response
   async function handleSendMessage(customMsg?: string) {
     const msgToSend = (customMsg !== undefined ? customMsg : userInput).trim()
@@ -280,6 +517,13 @@ export function AIVoiceAgent() {
 
     setUserInput('')
     const currentTime = formatTurnTime(callDurationSec)
+
+    // ── Human-Transfer Intent Detection ────────────────────────────────────
+    if (!humanTransferDetected && detectHumanTransferIntent(msgToSend)) {
+      setHumanTransferDetected(true)
+      setShowCalendlySmsModal(true)
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     // Add Prospect turn
     const updatedTurns: ConversationTurn[] = [
@@ -307,11 +551,17 @@ export function AIVoiceAgent() {
       setCallDurationSec(prev => prev + Math.floor(Math.random() * 8) + 5)
       const aiTime = formatTurnTime(callDurationSec + 8)
 
+      // If human transfer was detected, override the AI response to send Calendly context
+      let responseText = result.text
+      if (humanTransferDetected && !calendlySmsSent) {
+        responseText = `Of course! I completely understand — I'll send you a text message right now with a direct link to book a time with our team. You can choose any slot that works best for you. Is the number ${leadsList.find(l => l.name === prospectName)?.phone || 'we have on file'} the best one to reach you?`
+      }
+
       const finalTurns: ConversationTurn[] = [
         ...updatedTurns,
         {
           speaker: 'AI',
-          text: result.text,
+          text: responseText,
           time: aiTime,
           isGemini: result.isGemini
         }
@@ -320,7 +570,7 @@ export function AIVoiceAgent() {
       setIsAiResponding(false)
 
       // Speak aloud
-      speakTurn(result.text)
+      speakTurn(responseText)
     } catch (err) {
       setIsAiResponding(false)
     }
@@ -328,9 +578,8 @@ export function AIVoiceAgent() {
 
   // End Call & Analyze (Screenshot 4)
   async function handleEndCallAndAnalyze() {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
+    stopMic()
+    cancelSpeech()
     setSpeechActive(false)
     setCallStatus('COMPLETED')
     if (callTimerRef.current) clearInterval(callTimerRef.current)
@@ -338,18 +587,160 @@ export function AIVoiceAgent() {
     // Run analysis
     const analysis = await generateGeminiCallAnalysis(transcript, prospectName, callDurationSec)
     setAnalysisResult(analysis)
+
+    // Persist session to callHistoryStore
+    try {
+      const liveSession = callHistoryStore.startSession({
+        prospectName,
+        company: businessProfile.companyName || 'Acme Digital Solutions',
+        agentName: cleanAgentName,
+        language: simLanguage === 'Hindi' ? 'hi' : simLanguage === 'Gujarati' ? 'gu' : 'en',
+        scenario: 'INTERESTED',
+        isAIGenerated: true,
+      })
+      transcript.forEach(t => {
+        callHistoryStore.addTranscriptTurn(liveSession.sessionId, {
+          speaker: t.speaker,
+          text: t.text,
+          timestamp: t.time,
+          isGeminiGenerated: t.isGemini,
+        })
+      })
+      callHistoryStore.endSession(liveSession.sessionId, {
+        outcome: analysis.verdict === 'QUALIFIED' ? 'QUALIFIED' : 'ANSWERED',
+        sentiment: analysis.sentiment,
+        intent: analysis.intent,
+        qualification: analysis.verdict as any,
+        buyingSignals: analysis.buyingSignals,
+        objections: [],
+        summary: analysis.summaryText,
+        nextBestAction: analysis.nextAction,
+        engagementScore: analysis.score,
+        durationSeconds: callDurationSec,
+      })
+    } catch (e) {
+      console.warn('Could not persist to callHistoryStore:', e)
+    }
+
     showToast('info', 'Call Ended', `Analysis ready for ${prospectName}`)
+
+    // Auto-sync session to CRM if enabled
+    if (crmConfig.autoSyncCalls) {
+      setIsSyncingCrm(true)
+      try {
+        const syncRes = await syncVoiceCallToCrm({
+          callId: `CALL-STUDIO-${Date.now()}`,
+          prospectName,
+          company: businessProfile.companyName || 'Acme Digital Solutions',
+          agentName: cleanAgentName,
+          language: simLanguage === 'Hindi' ? 'hi' : simLanguage === 'Gujarati' ? 'gu' : 'en',
+          durationSeconds: callDurationSec,
+          outcome: analysis.verdict === 'QUALIFIED' ? 'QUALIFIED' : 'ANSWERED',
+          sentiment: analysis.sentiment,
+          qualification: analysis.verdict as any,
+          intentScore: analysis.score,
+          summary: analysis.summaryText,
+          nextBestAction: analysis.nextAction,
+          buyingSignals: analysis.buyingSignals,
+          objections: [],
+          transcript: transcript.map(t => ({ speaker: t.speaker, text: t.text, time: t.time })),
+          targetCrmId: crmConfig.targetCrmId,
+        })
+        if (syncRes.success) {
+          setLastSyncedCrmName(syncRes.crmName)
+          showToast('success', 'Synced to CRM', `Auto-pushed call recording & intelligence to ${syncRes.crmName}`)
+        }
+      } catch (err) {
+        console.warn('CRM sync error:', err)
+      } finally {
+        setIsSyncingCrm(false)
+      }
+    }
+  }
+
+  // Manual Trigger to sync current call studio session to CRM
+  async function handleManualSyncCurrentCall() {
+    if (!analysisResult) return
+    setIsSyncingCrm(true)
+    try {
+      const syncRes = await syncVoiceCallToCrm({
+        callId: `CALL-STUDIO-${Date.now()}`,
+        prospectName,
+        company: businessProfile.companyName || 'Acme Digital Solutions',
+        agentName: cleanAgentName,
+        language: simLanguage === 'Hindi' ? 'hi' : simLanguage === 'Gujarati' ? 'gu' : 'en',
+        durationSeconds: callDurationSec,
+        outcome: analysisResult.verdict === 'QUALIFIED' ? 'QUALIFIED' : 'ANSWERED',
+        sentiment: analysisResult.sentiment,
+        qualification: analysisResult.verdict as any,
+        intentScore: analysisResult.score,
+        summary: analysisResult.summaryText,
+        nextBestAction: analysisResult.nextAction,
+        buyingSignals: analysisResult.buyingSignals,
+        objections: [],
+        transcript: transcript.map(t => ({ speaker: t.speaker, text: t.text, time: t.time })),
+        targetCrmId: crmConfig.targetCrmId,
+      }, { force: true })
+      if (syncRes.success) {
+        setLastSyncedCrmName(syncRes.crmName)
+        showToast('success', 'Synced to CRM', `Call recording & intelligence pushed to ${syncRes.crmName}!`)
+      }
+    } catch (err) {
+      showToast('error', 'Sync Failed', 'Failed to sync call with CRM')
+    } finally {
+      setIsSyncingCrm(false)
+    }
+  }
+
+  // Push interested prospect directly into CRM
+  async function handleSyncInterestedProspect(item: typeof interestedProspectsList[0]) {
+    try {
+      const res = await syncVoiceCallToCrm({
+        callId: item.id,
+        prospectName: item.name,
+        company: item.company,
+        phone: item.phone,
+        email: item.email,
+        durationSeconds: 210,
+        outcome: 'QUALIFIED',
+        sentiment: item.sentiment,
+        qualification: 'QUALIFIED',
+        intentScore: item.score,
+        summary: `Call Result: ${item.outcome}`,
+        nextBestAction: item.nextAction,
+        buyingSignals: item.signals,
+        targetCrmId: crmConfig.targetCrmId,
+      }, { force: true })
+
+      setSyncedProspectMap(prev => ({
+        ...prev,
+        [item.id]: { crmName: res.crmName, time: 'Just now' },
+      }))
+      showToast('success', 'Synced to CRM', `${item.name} (${item.company}) pushed into ${res.crmName}`)
+    } catch (e) {
+      showToast('error', 'Sync Failed', 'Could not sync prospect to CRM')
+    }
+  }
+
+  // Batch sync all interested prospects into CRM
+  async function handleSyncAllInterestedProspects() {
+    showToast('info', 'Syncing Prospects...', 'Batch pushing all interested leads to connected CRM')
+    for (const item of interestedProspectsList) {
+      await handleSyncInterestedProspect(item)
+    }
+    showToast('success', 'Batch Sync Complete', 'All interested prospects synced to CRM')
   }
 
   // Start a new call in studio
   function handleStartNewCall() {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
+    stopMic()
+    cancelSpeech()
     setSpeechActive(false)
     setCallStatus('IN_PROGRESS')
     setCallDurationSec(0)
     setAnalysisResult(null)
+    setMicError(null)
+    setInterimText('')
 
     let greetingText = `Hi ${prospectName}, this is ${cleanAgentName} from ${businessProfile.companyName || 'Callisto AI Solutions'} — we help companies like Acme Digital Solutions automate sales calls with AI. Do you have 2 minutes?`
     if (callDirection === 'INBOUND') {
@@ -362,11 +753,15 @@ export function AIVoiceAgent() {
       time: '00:00'
     }
     setTranscript([initialTurn])
+    // Speak greeting, then enable mic so prospect can respond
+    micEnabledRef.current = true
     speakTurn(initialTurn.text)
   }
 
   // Voicemail Drop action
   function handleVoicemailDrop() {
+    stopMic()
+    cancelSpeech()
     const prospectMatch = leadsList.find(l => l.name === prospectName)
     const prospectEmail = prospectMatch?.email || 'prospect@demo-acme.com'
     const vmText = `Hi ${prospectName}, this is ${cleanAgentName} calling from ${businessProfile.companyName || 'Callisto AI Solutions'}. I noticed your company's requirement regarding sales automation and AI voice infrastructure. I have sent our pricing deck and enterprise overview to ${prospectEmail}. Please feel free to reply or schedule a demo at your convenience. Have a great day!`
@@ -394,6 +789,8 @@ export function AIVoiceAgent() {
 
   // Schedule Callback action
   function handleScheduleCallback(timing: string) {
+    stopMic()
+    cancelSpeech()
     const pTurn: ConversationTurn = {
       speaker: 'PROSPECT',
       text: `Can you call me back ${timing}? I am currently in a meeting.`,
@@ -467,46 +864,87 @@ export function AIVoiceAgent() {
     "We're actively evaluating vendors",
     'Can you share a case study?',
     'Is this SOC-2 certified?',
-    'We need this for Q4'
+    'We need this for Q4',
+    'Can I speak to a human?',
+    'I want to book a call with your team'
   ]
 
   const sentimentColor = (s: string) => s === 'POSITIVE' ? 'text-success' : s === 'NEGATIVE' ? 'text-danger-bright' : 'text-text-muted'
   const qualColor = (q: string) => q === 'QUALIFIED' ? 'badge-success' : q === 'LIKELY' ? 'badge-amber' : q === 'NEEDS_REVIEW' ? 'badge-blue' : 'badge-low'
 
   return (
-    <div className="p-3 sm:p-4 space-y-4 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <PhoneCall className="w-4 h-4 text-amber-400 shrink-0" />
-          <h1 className="text-sm font-bold text-text-primary">{t('voice.title', 'AI Voice Agent')}</h1>
-          <span className="flex items-center gap-1.5 text-2xs text-success font-medium ml-2">
-            <Circle className="w-2 h-2 fill-success animate-pulse" /> {t('voice.online', 'ONLINE')}
-          </span>
-          <span className="badge-amber text-3xs font-mono ml-1">Agent: {cleanAgentName}</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-bg-border/60">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <PhoneCall className="w-5 h-5 text-sky-400 shrink-0" />
+            <h1 className="text-lg font-bold text-slate-100 tracking-wide font-sans">{t('voice.title', 'AI Voice Telephony & Speech Agent')}</h1>
+            <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-mono font-semibold ml-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              {t('voice.online', 'ONLINE')}
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">
+              Agent: {cleanAgentName}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 font-mono mt-1">
+            Multilingual outbound voice AI with speech recognition, dynamic objection handling & Calendly SMS dispatch.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => {
               setCallStudioOpen(true)
               if (callStatus === 'IDLE') handleStartNewCall()
             }}
-            className="btn-primary text-xs flex items-center justify-center gap-1.5 flex-1 sm:flex-initial shadow-lg shadow-amber-500/10"
+            className="btn-primary text-xs py-2 px-3.5 flex items-center justify-center gap-2 flex-1 sm:flex-initial"
           >
-            <Mic className="w-3.5 h-3.5 text-amber-300" />
+            <Mic className="w-3.5 h-3.5" />
             Live Call Studio & Speech
           </button>
-          <button onClick={() => setConfigOpen(true)} className="btn-secondary text-xs flex items-center justify-center gap-1.5 flex-1 sm:flex-initial">
-            <Sliders className="w-3.5 h-3.5" /> Configure Agent
+          <button
+            onClick={() => setConfigOpen(true)}
+            className="btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-2 flex-1 sm:flex-initial"
+          >
+            <Sliders className="w-3.5 h-3.5 text-slate-400" />
+            Configure Agent
           </button>
         </div>
       </div>
 
-      {/* Top Metrics Cards (matching Screenshot 5) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-        <MetricCard label={t('voice.activeCalls', 'Active Calls')} value={liveCalls.length} accent icon={<Phone className="w-3.5 h-3.5" />} />
-        <MetricCard label={t('metric.callsToday', 'Calls Today')} value={845} delta={21.3} />
-        <MetricCard label={t('voice.avgDuration', 'Avg Duration')} value="3" delta={12.5} />
+      {/* Real-time CRM Sync Status Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-bg-secondary rounded-lg border border-bg-border text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <Link2 className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <div className="text-2xs font-semibold text-text-primary flex items-center gap-2">
+              Enterprise CRM Synchronization
+              <span className="badge-success text-3xs font-mono">LIVE 2-WAY SYNC</span>
+            </div>
+            <div className="text-3xs text-text-muted">
+              Every completed call, transcript, sentiment score & next action auto-pushes to {availableCrms.filter(c => c.status === 'CONNECTED').map(c => c.name).join(', ') || 'Salesforce CRM'} within 5 seconds.
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => navigate('/crm')}
+            className="btn-secondary text-3xs py-1 px-2.5 font-semibold flex items-center gap-1 text-amber-400 hover:border-amber-500/50"
+          >
+            Manage CRM Integrations <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+
+      {/* Top Metrics Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <MetricCard label={t('voice.activeCalls', 'Active Telephony')} value={liveCalls.length} accent icon={<Phone className="w-4 h-4" />} />
+        <MetricCard label={t('metric.callsToday', 'Calls Dispatched')} value={845} delta={21.3} />
+        <MetricCard label={t('voice.avgDuration', 'Avg Talk Time')} value="3m 12s" delta={12.5} />
         <MetricCard label={t('voice.qualRate', 'Qualification Rate')} value="31%" delta={4.2} />
       </div>
 
@@ -519,52 +957,278 @@ export function AIVoiceAgent() {
               Interested Prospects for Follow-up
             </span>
             <span className="badge-success text-3xs font-mono">3 ACTION REQUIRED</span>
+            <span className="badge-blue text-3xs font-mono hidden sm:inline-flex">
+              SYNC TARGET: {crmConfig.targetCrmId.toUpperCase()}
+            </span>
           </div>
-          <span className="text-2xs text-text-muted font-mono">Real-time intent captured from voice outreach</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSyncAllInterestedProspects}
+              className="btn-secondary text-3xs py-1 px-2.5 font-semibold gap-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 flex items-center"
+              title="Push all interested leads to connected CRM at once"
+            >
+              <RefreshCw className="w-3 h-3" /> Sync All to CRM
+            </button>
+            <span className="text-2xs text-text-muted font-mono hidden md:inline">Real-time intent captured from voice outreach</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {interestedProspectsList.map(item => (
-            <div key={item.id} className="p-3 bg-bg-card rounded-lg border border-bg-border space-y-2.5 hover:border-emerald-500/40 transition-colors">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-xs font-bold text-text-primary flex items-center gap-1.5">
-                    {item.name}
-                    <span className="badge-high text-3xs">HOT</span>
+          {interestedProspectsList.map(item => {
+            const syncedInfo = syncedProspectMap[item.id]
+            return (
+              <div key={item.id} className="p-3 bg-bg-card rounded-lg border border-bg-border space-y-2.5 hover:border-emerald-500/40 transition-colors">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                      {item.name}
+                      <span className="badge-high text-3xs">HOT</span>
+                      {syncedInfo && (
+                        <span className="badge-success text-3xs py-0 px-1 font-mono flex items-center gap-0.5">
+                          <Check className="w-2.5 h-2.5" /> CRM
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-3xs text-text-muted mt-0.5">{item.company}</div>
                   </div>
-                  <div className="text-3xs text-text-muted mt-0.5">{item.company}</div>
+                  <span className="font-mono text-xs font-bold text-success">{item.score}/100</span>
                 </div>
-                <span className="font-mono text-xs font-bold text-success">{item.score}/100</span>
-              </div>
 
-              {/* Call Result Highlight Box matching Screenshot 5 */}
-              <div className="p-2.5 bg-emerald-500/10 rounded border border-emerald-500/25 text-3xs text-emerald-400 leading-relaxed font-medium">
-                Call Result: {item.outcome}
-              </div>
+                {/* Call Result Highlight Box matching Screenshot 5 */}
+                <div className="p-2.5 bg-emerald-500/10 rounded border border-emerald-500/25 text-3xs text-emerald-400 leading-relaxed font-medium">
+                  Call Result: {item.outcome}
+                </div>
 
-              <div className="text-3xs text-text-secondary">
-                <span className="text-text-muted font-semibold">Next Step: </span>
-                {item.nextAction}
-              </div>
+                <div className="text-3xs text-text-secondary">
+                  <span className="text-text-muted font-semibold">Next Step: </span>
+                  {item.nextAction}
+                </div>
 
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={() => showToast('success', 'Demo Booked', `Executive demo slot confirmed for ${item.name}`)}
-                  className="btn-primary text-3xs py-1.5 px-2.5 flex-1 justify-center gap-1 font-semibold"
-                >
-                  <Calendar className="w-3 h-3" /> Book Demo
-                </button>
-                <button
-                  onClick={() => showToast('success', 'Synced to CRM', `${item.name} updated in CRM pipeline`)}
-                  className="btn-secondary text-3xs py-1.5 px-2.5 flex-1 justify-center font-semibold"
-                >
-                  Sync CRM
-                </button>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      syncActivityToCrm({
+                        type: 'CALENDLY_MEETING',
+                        title: `Demo Scheduled: ${item.name}`,
+                        prospectName: item.name,
+                        company: item.company,
+                        details: `Executive demo slot confirmed: ${item.outcome}`,
+                        score: item.score,
+                        targetCrmId: crmConfig.targetCrmId,
+                      })
+                      showToast('success', 'Demo Booked & CRM Updated', `Executive demo slot confirmed for ${item.name} and synced to CRM`)
+                    }}
+                    className="btn-primary text-3xs py-1.5 px-2.5 flex-1 justify-center gap-1 font-semibold"
+                  >
+                    <Calendar className="w-3 h-3" /> Book Demo
+                  </button>
+                  <button
+                    onClick={() => handleSyncInterestedProspect(item)}
+                    className={`btn-secondary text-3xs py-1.5 px-2.5 flex-1 justify-center font-semibold flex items-center gap-1 ${
+                      syncedInfo ? 'text-emerald-400 border-emerald-500/30' : 'hover:border-amber-500/40'
+                    }`}
+                    title={syncedInfo ? `Synced to ${syncedInfo.crmName} (${syncedInfo.time})` : 'Push lead & call notes to CRM'}
+                  >
+                    {syncedInfo ? <Check className="w-3 h-3" /> : <Link2 className="w-3 h-3" />}
+                    {syncedInfo ? `Synced (${syncedInfo.crmName.split(' ')[0]})` : 'Sync CRM'}
+                  </button>
+                </div>
               </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Calendly Booking Tracker Panel */}
+      <div className="panel p-4 bg-gradient-to-r from-violet-500/10 via-bg-card to-blue-500/5 border border-violet-500/25 rounded-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-bg-border pb-2.5">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-violet-400 shrink-0" />
+            <span className="text-xs font-bold text-text-primary">Calendly Booking Tracker</span>
+            <span className="badge-blue text-3xs font-mono flex items-center gap-1">
+              <Smartphone className="w-2.5 h-2.5" /> SMS + CALENDLY
+            </span>
+            {calendlyStats.followUpScheduled > 0 && (
+              <span className="badge-amber text-3xs font-mono flex items-center gap-1 animate-pulse">
+                <AlertTriangle className="w-2.5 h-2.5" /> {calendlyStats.followUpScheduled} FOLLOW-UP DUE
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={refreshCalendlyData}
+              className="btn-ghost p-1.5 text-text-muted hover:text-violet-400 transition-colors"
+              title="Refresh booking status"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setShowCalendlyTracker(!showCalendlyTracker)}
+              className="text-2xs text-violet-400 underline font-mono hover:no-underline"
+            >
+              {showCalendlyTracker ? 'Collapse' : 'Show Details'}
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { label: 'SMS Sent', value: calendlyStats.total, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/25' },
+            { label: 'Booked ✓', value: calendlyStats.booked, color: 'text-success', bg: 'bg-emerald-500/10 border-emerald-500/25' },
+            { label: 'Link Opened', value: calendlyStats.opened, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/25' },
+            { label: 'Booking Rate', value: `${calendlyStats.bookingRate}%`, color: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/25' },
+          ].map(s => (
+            <div key={s.label} className={`p-2.5 rounded-lg border ${s.bg} text-center`}>
+              <div className={`text-base font-bold ${s.color}`}>{s.value}</div>
+              <div className="text-3xs text-text-muted uppercase font-semibold mt-0.5">{s.label}</div>
             </div>
           ))}
         </div>
+
+        {/* Detailed list */}
+        {showCalendlyTracker && (
+          <div className="space-y-2 animate-fade-in">
+            {calendlyBookings.length === 0 ? (
+              <div className="text-center text-2xs text-text-muted py-4">
+                No Calendly links sent yet. Links are dispatched automatically when a prospect requests to speak with a human.
+              </div>
+            ) : (
+              calendlyBookings.map(record => (
+                <div
+                  key={record.id}
+                  className={`p-3 rounded-lg border space-y-2 transition-colors ${
+                    record.bookingStatus === 'BOOKED'
+                      ? 'bg-emerald-500/5 border-emerald-500/30'
+                      : record.bookingStatus === 'LINK_OPENED'
+                      ? 'bg-amber-500/5 border-amber-500/25'
+                      : record.bookingStatus === 'CANCELLED'
+                      ? 'bg-red-500/5 border-red-500/25'
+                      : 'bg-bg-card border-bg-border'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-bold text-text-primary">{record.leadName}</span>
+                        <span className="text-2xs text-text-muted">· {record.company}</span>
+                        <span className={`text-3xs font-bold px-1.5 py-0.5 rounded font-mono ${
+                          record.bookingStatus === 'BOOKED' ? 'bg-emerald-500/20 text-emerald-300'
+                          : record.bookingStatus === 'LINK_OPENED' ? 'bg-amber-500/20 text-amber-300'
+                          : record.bookingStatus === 'CANCELLED' ? 'bg-red-500/20 text-red-300'
+                          : record.bookingStatus === 'EMAIL_SENT' ? 'bg-sky-500/20 text-sky-300'
+                          : record.bookingStatus === 'DISPATCHED' ? 'bg-purple-500/20 text-purple-300'
+                          : 'bg-blue-500/20 text-blue-300'
+                        }`}>
+                          {record.bookingStatus === 'SMS_SENT'
+                            ? '📱 SMS SENT'
+                            : record.bookingStatus === 'EMAIL_SENT'
+                            ? '✉️ EMAIL SENT'
+                            : record.bookingStatus === 'DISPATCHED'
+                            ? '🚀 EMAIL + SMS'
+                            : record.bookingStatus === 'LINK_OPENED'
+                            ? '👀 LINK OPENED'
+                            : record.bookingStatus === 'BOOKED'
+                            ? '✅ BOOKED'
+                            : '❌ CANCELLED'}
+                        </span>
+                        {record.followUpCallScheduled && record.bookingStatus !== 'BOOKED' && (
+                          <span className="text-3xs bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">
+                            🔁 FOLLOW-UP: {record.followUpCallAt}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-3xs text-text-muted mt-0.5 font-mono">
+                        {record.dispatchChannel === 'EMAIL'
+                          ? `✉️ Mail: ${record.leadEmail}`
+                          : record.dispatchChannel === 'BOTH'
+                          ? `🚀 Mail: ${record.leadEmail} · Phone: ${record.leadPhone}`
+                          : `📱 SMS: ${record.leadPhone}`} · {record.emailSentAtIST || record.smsSentAtIST} · Agent: {record.agentName}
+                      </div>
+                      {record.bookedSlot && (
+                        <div className="text-2xs text-success font-semibold mt-1 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" /> {record.bookedSlot}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-1 shrink-0">
+                      {record.bookingStatus !== 'BOOKED' && (
+                        <>
+                          <button
+                            onClick={() => {
+                              simulateCalendlyEvent(record.id, 'booked')
+                              refreshCalendlyData()
+                              syncActivityToCrm({
+                                type: 'CALENDLY_MEETING',
+                                title: `Meeting Confirmed: ${record.leadName}`,
+                                prospectName: record.leadName,
+                                company: record.company || 'Enterprise Partner',
+                                details: `Prospect confirmed Calendly demo via SMS link (${record.calendlyLink}). Booked slot: ${record.bookedSlot || 'Tomorrow 3:00 PM IST'}`,
+                                score: 95,
+                                targetCrmId: crmConfig.targetCrmId,
+                              })
+                              showToast('success', 'Booking Confirmed & Synced', `${record.leadName} booked slot via Calendly — Pushed to CRM Calendar!`)
+                            }}
+                            className="text-3xs px-1.5 py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 font-semibold transition-colors"
+                            title="Simulate: Calendly booking confirmed"
+                          >
+                            Sim. Book
+                          </button>
+                          <button
+                            onClick={() => {
+                              simulateCalendlyEvent(record.id, 'opened')
+                              refreshCalendlyData()
+                              showToast('info', 'Link Opened', `${record.leadName} opened the Calendly link`)
+                            }}
+                            className="text-3xs px-1.5 py-1 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 font-semibold transition-colors"
+                            title="Simulate: Calendly link opened"
+                          >
+                            Sim. Open
+                          </button>
+                          <button
+                            onClick={() => setFollowUpModal({ open: true, recordId: record.id, leadName: record.leadName })}
+                            className="text-3xs px-1.5 py-1 rounded bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 border border-violet-500/30 font-semibold transition-colors"
+                            title="Schedule follow-up re-call"
+                          >
+                            Re-call
+                          </button>
+                        </>
+                      )}
+                      <a
+                        href={record.calendlyLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-3xs px-1.5 py-1 rounded bg-bg-secondary text-text-muted hover:text-blue-400 border border-bg-border font-semibold transition-colors flex items-center gap-0.5"
+                        title="Open Calendly link"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-3xs text-text-muted pt-1 border-t border-bg-border/50">
+          <span className="font-mono">Webhook: POST /api/webhooks/calendly · SMS via Twilio</span>
+          <button
+            onClick={() => {
+              setShowCalendlyTracker(true)
+              setShowCalendlySmsModal(true)
+              setCalendlySmsSent(false)
+            }}
+            className="btn-secondary text-3xs py-1 px-2.5 gap-1 text-violet-400 border-violet-500/30 hover:bg-violet-500/10 font-medium"
+          >
+            <Smartphone className="w-3 h-3" /> Send Manual SMS
+          </button>
+        </div>
       </div>
+
+      {/* ── Real Phone Call Integration (Twilio Voice + WebSocket + Gemini 2.0) ── */}
+      <PhoneCallPanel />
 
       {/* Live Call Monitor (matching Screenshot 5) */}
       <div className="panel">
@@ -627,7 +1291,8 @@ export function AIVoiceAgent() {
               </div>
               <button
                 onClick={() => {
-                  if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel()
+                  stopMic()
+                  cancelSpeech()
                   setCallStudioOpen(false)
                 }}
                 className="text-text-muted hover:text-text-primary"
@@ -816,10 +1481,10 @@ export function AIVoiceAgent() {
               </div>
             </div>
 
-            {/* Automation Actions Toolbar (Voicemail, Callback, FAQs, Retries) */}
+            {/* Automation Actions Toolbar (Voicemail, Callback, FAQs, Calendly SMS, Retries) */}
             {callStatus === 'IN_PROGRESS' && (
               <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-bg-card rounded-lg border border-bg-border text-2xs">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={handleVoicemailDrop}
@@ -845,6 +1510,21 @@ export function AIVoiceAgent() {
                     title="Open live FAQ cheat sheet"
                   >
                     <HelpCircle className="w-3 h-3 text-emerald-400" /> Live FAQs (5)
+                  </button>
+
+                  {/* Calendly Mail / SMS Dispatch Button */}
+                  <button
+                    type="button"
+                    onClick={() => { setShowCalendlySmsModal(true); setCalendlySmsSent(false) }}
+                    className={`btn-secondary text-3xs py-1 px-2.5 gap-1 font-medium transition-all ${
+                      humanTransferDetected
+                        ? 'text-violet-300 border-violet-400 bg-violet-500/15 animate-pulse'
+                        : 'text-violet-400 border-violet-500/30 hover:bg-violet-500/10'
+                    }`}
+                    title="Send Calendly booking link via Mail or SMS"
+                  >
+                    <Mail className="w-3 h-3 text-sky-400" />
+                    {humanTransferDetected ? '⚡ Send Calendly Link' : 'Send Calendly Link'}
                   </button>
                 </div>
 
@@ -896,16 +1576,28 @@ export function AIVoiceAgent() {
               </div>
             )}
 
-            {/* Neural Speech Engine Standby Banner matching Screenshots 1-4 */}
+            {/* Neural Speech Engine Standby Banner */}
             <div className="p-2.5 bg-bg-card rounded-lg border border-bg-border flex items-center justify-between font-mono text-2xs">
-              <div className="flex items-center gap-1.5 text-amber-400">
-                <span className="tracking-widest">•••••••••••••</span>
-                <span className="text-text-muted ml-1 font-sans">
-                  {speechActive ? `${cleanAgentName} Voice Synthesizer Active` : 'Neural Speech Engine Standby'}
-                </span>
+              <div className="flex items-center gap-1.5">
+                {micActive ? (
+                  <span className="flex items-center gap-1.5 text-red-400 animate-pulse">
+                    <Mic className="w-3 h-3" />
+                    <span className="font-sans font-medium">Mic Live — Listening to {prospectName}…</span>
+                  </span>
+                ) : speechActive ? (
+                  <span className="flex items-center gap-1.5 text-amber-400">
+                    <Volume2 className="w-3 h-3" />
+                    <span className="font-sans font-medium">{cleanAgentName} Voice Synthesizer Active</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-text-muted">
+                    <span className="tracking-widest text-amber-400">•••••••••••••</span>
+                    <span className="font-sans">Neural Speech Engine Standby</span>
+                  </span>
+                )}
               </div>
               <span className="text-emerald-400 flex items-center gap-1 font-medium">
-                <Sparkles className="w-3 h-3 text-emerald-400" /> @ gemini-3.8-flash
+                <Sparkles className="w-3 h-3 text-emerald-400" /> @ {DISPLAY_ENGINE_LABEL}
               </span>
             </div>
 
@@ -964,37 +1656,86 @@ export function AIVoiceAgent() {
               )}
             </div>
 
-            {/* Prospect Message Input & Suggestion Chips (Screenshots 1-3) */}
+            {/* Prospect Voice Input + Text Fallback */}
             {callStatus === 'IN_PROGRESS' && (
-              <div className="space-y-2 pt-1">
-                <div className="text-3xs uppercase font-bold text-text-muted flex items-center gap-1.5">
-                  <MessageSquare className="w-3 h-3 text-amber-400" />
-                  TYPE WHAT {prospectName.toUpperCase()} SAYS — GEMINI AI WILL RESPOND
-                </div>
+              <div className="space-y-3 pt-1">
+                {/* Live Interim Transcript (what mic is hearing) */}
+                {interimText && (
+                  <div className="px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg text-2xs text-blue-200 italic animate-pulse">
+                    <span className="text-blue-400 font-semibold not-italic">{prospectName}: </span>
+                    {interimText}<span className="animate-ping ml-0.5">▌</span>
+                  </div>
+                )}
 
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="input text-xs flex-1 py-2 px-3 border-bg-border focus:border-amber-400"
-                    placeholder={`e.g. "What's the pricing?" or "We're interested, tell me more..."`}
-                    value={userInput}
-                    onChange={e => setUserInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') handleSendMessage()
-                    }}
-                    disabled={isAiResponding}
-                  />
+                {/* Mic error */}
+                {micError && (
+                  <div className="px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-2xs text-red-300">
+                    ⚠ {micError}
+                  </div>
+                )}
+
+                {/* Big Mic Button Row */}
+                <div className="flex items-center gap-3">
+                  {/* Mic toggle button */}
                   <button
-                    onClick={() => handleSendMessage()}
-                    disabled={!userInput.trim() || isAiResponding}
-                    className="btn-primary text-xs py-2 px-4 gap-1.5 font-bold shadow-md shadow-amber-500/20 disabled:opacity-50"
+                    type="button"
+                    onClick={() => {
+                      if (micActive) {
+                        micEnabledRef.current = false
+                        stopMic()
+                        showToast('info', 'Mic Paused', 'Click the mic again to resume listening')
+                      } else {
+                        micEnabledRef.current = true
+                        startMic()
+                        showToast('success', 'Mic Active', `Listening to ${prospectName} — speak now`)
+                      }
+                    }}
+                    disabled={isAiResponding || speechActive}
+                    title={micActive ? 'Click to pause mic' : 'Click to activate microphone'}
+                    className={`relative flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg disabled:opacity-40 ${
+                      micActive
+                        ? 'bg-red-500 shadow-red-500/40 scale-110 animate-pulse'
+                        : 'bg-bg-card border-2 border-amber-500/50 hover:border-amber-400 hover:bg-amber-500/10'
+                    }`}
                   >
-                    <Send className="w-3.5 h-3.5" /> Send
+                    <Mic className={`w-6 h-6 ${micActive ? 'text-white' : 'text-amber-400'}`} />
+                    {micActive && (
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-400 rounded-full border-2 border-bg-primary animate-ping" />
+                    )}
                   </button>
+
+                  <div className="flex-1 space-y-1.5">
+                    <div className="text-3xs uppercase font-bold text-text-muted flex items-center gap-1.5">
+                      <Mic className="w-3 h-3 text-red-400" />
+                      {micActive
+                        ? `LISTENING — speak as ${prospectName} · say "disconnect" to end call`
+                        : 'CLICK MIC OR TYPE BELOW — Gemini AI will respond'}
+                    </div>
+
+                    {/* Text input fallback */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="input text-xs flex-1 py-2 px-3 border-bg-border focus:border-amber-400"
+                        placeholder={micActive ? "Also type here if mic isn't picking up…" : `Type what ${prospectName} says…`}
+                        value={userInput}
+                        onChange={e => setUserInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleSendMessage() }}
+                        disabled={isAiResponding}
+                      />
+                      <button
+                        onClick={() => handleSendMessage()}
+                        disabled={!userInput.trim() || isAiResponding}
+                        className="btn-primary text-xs py-2 px-3 gap-1.5 font-bold disabled:opacity-50"
+                      >
+                        <Send className="w-3.5 h-3.5" /> Send
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Suggested prompt chips matching Screenshots 1-3 */}
-                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {/* Quick-chip suggestions */}
+                <div className="flex flex-wrap gap-1.5">
                   {suggestedChips.map((chip, idx) => (
                     <button
                       key={idx}
@@ -1065,20 +1806,84 @@ export function AIVoiceAgent() {
                   {analysisResult.nextAction}
                 </div>
 
+                {/* Dedicated CRM Intelligence Sync Box */}
+                <div className="p-2.5 bg-bg-secondary rounded border border-emerald-500/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-3xs font-semibold text-emerald-400">
+                      <Link2 className="w-3.5 h-3.5" />
+                      <span>CRM Timeline Hand-off</span>
+                    </div>
+                    {lastSyncedCrmName ? (
+                      <span className="badge-success text-3xs py-0.5 px-1.5 font-mono flex items-center gap-1">
+                        <Check className="w-2.5 h-2.5" /> Synced to {lastSyncedCrmName}
+                      </span>
+                    ) : (
+                      <span className="badge-amber text-3xs py-0.5 px-1.5 font-mono">
+                        Ready to Sync
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-3xs text-text-muted leading-tight">
+                    Audio recording, full conversation transcript, buying signals, and {analysisResult.score}% qualification score mapped to {crmConfig.targetCrmId.toUpperCase()} Contact & Activity records.
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-1 text-3xs text-text-secondary">
+                      <span>Target:</span>
+                      <select
+                        className="bg-bg-card border border-bg-border rounded px-1.5 py-0.5 text-3xs text-text-primary focus:outline-none focus:border-amber-400"
+                        value={crmConfig.targetCrmId}
+                        onChange={e => {
+                          const updated = saveVoiceAgentCrmConfig({ targetCrmId: e.target.value })
+                          setCrmConfig(updated)
+                        }}
+                      >
+                        {availableCrms.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={handleManualSyncCurrentCall}
+                        disabled={isSyncingCrm}
+                        className="btn-primary text-3xs py-1 px-2.5 font-semibold flex items-center gap-1 disabled:opacity-50"
+                      >
+                        {isSyncingCrm ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+                        {isSyncingCrm ? 'Syncing...' : lastSyncedCrmName ? 'Re-Sync CRM' : 'Push to CRM'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCallStudioOpen(false)
+                          navigate('/crm')
+                        }}
+                        className="btn-secondary text-3xs py-1 px-2 font-semibold flex items-center gap-1 text-amber-400"
+                        title="Open CRM Hub"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" /> CRM Hub
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Action Buttons */}
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex gap-2">
                     <button
-                      onClick={() => showToast('success', 'Synced to CRM', `Call recording & transcript pushed to CRM for ${prospectName}`)}
-                      className="btn-primary text-3xs py-1.5 px-3 font-semibold"
+                      onClick={() => {
+                        syncActivityToCrm({
+                          type: 'CALENDLY_MEETING',
+                          title: `Executive Demo: ${prospectName}`,
+                          prospectName,
+                          company: businessProfile.companyName || 'Enterprise Partner',
+                          details: `Demo meeting scheduled following AI Voice qualification call. Next action: ${analysisResult.nextAction}`,
+                          score: analysisResult.score,
+                          targetCrmId: crmConfig.targetCrmId,
+                        })
+                        showToast('success', 'Demo Booked & Synced', `Demo slot scheduled for ${prospectName} and pushed to CRM!`)
+                      }}
+                      className="btn-secondary text-3xs py-1.5 px-3 font-semibold flex items-center gap-1"
                     >
-                      Sync to CRM
-                    </button>
-                    <button
-                      onClick={() => showToast('success', 'Demo Booked', `Demo slot scheduled for ${prospectName}`)}
-                      className="btn-secondary text-3xs py-1.5 px-3 font-semibold"
-                    >
-                      Book Demo
+                      <Calendar className="w-3 h-3 text-amber-400" /> Book Demo
                     </button>
                   </div>
                   <button
@@ -1426,6 +2231,509 @@ export function AIVoiceAgent() {
               >
                 <Calendar className="w-3.5 h-3.5" /> Dispatch Calendar Invite
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Calendly SMS Dispatch Modal */}
+      {showCalendlySmsModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="panel max-w-md w-full p-5 space-y-4 border border-violet-500/40 shadow-2xl animate-fade-in max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-bg-border pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center shrink-0">
+                  {calendlyDispatchChannel === 'EMAIL' ? (
+                    <Mail className="w-4 h-4 text-sky-400" />
+                  ) : calendlyDispatchChannel === 'SMS' ? (
+                    <Smartphone className="w-4 h-4 text-violet-400" />
+                  ) : (
+                    <Send className="w-4 h-4 text-emerald-400" />
+                  )}
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-text-primary flex items-center gap-2">
+                    Send Calendly Booking Link
+                    {humanTransferDetected && (
+                      <span className="badge-amber text-3xs font-mono">🤖 AI DETECTED</span>
+                    )}
+                  </div>
+                  <div className="text-3xs text-text-muted">
+                    {humanTransferDetected
+                      ? `${prospectName} requested to speak with a human — send them a booking link`
+                      : calendlyDispatchChannel === 'EMAIL'
+                      ? `Dispatch direct Calendly booking invitation via Mail to ${prospectName}`
+                      : calendlyDispatchChannel === 'SMS'
+                      ? `Dispatch direct Calendly booking SMS to ${prospectName}`
+                      : `Dispatch Calendly booking link via Mail & SMS to ${prospectName}`}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowCalendlySmsModal(false); setCalendlySmsSent(false) }}
+                className="text-text-muted hover:text-text-primary p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {!calendlySmsSent ? (
+              <>
+                {/* Channel Selector Pills */}
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-bg-secondary rounded-lg border border-bg-border text-2xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setCalendlyDispatchChannel('EMAIL')}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded transition-all ${
+                      calendlyDispatchChannel === 'EMAIL'
+                        ? 'bg-violet-600 text-white shadow-sm font-bold'
+                        : 'text-text-muted hover:text-text-primary'
+                    }`}
+                  >
+                    <Mail className="w-3 h-3" /> Mail (Email)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalendlyDispatchChannel('SMS')}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded transition-all ${
+                      calendlyDispatchChannel === 'SMS'
+                        ? 'bg-violet-600 text-white shadow-sm font-bold'
+                        : 'text-text-muted hover:text-text-primary'
+                    }`}
+                  >
+                    <Smartphone className="w-3 h-3" /> SMS (Twilio)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalendlyDispatchChannel('BOTH')}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded transition-all ${
+                      calendlyDispatchChannel === 'BOTH'
+                        ? 'bg-violet-600 text-white shadow-sm font-bold'
+                        : 'text-text-muted hover:text-text-primary'
+                    }`}
+                  >
+                    <Zap className="w-3 h-3" /> Email + SMS
+                  </button>
+                </div>
+
+                {/* Prospect Contact Info */}
+                <div className="p-3 bg-bg-secondary rounded-lg border border-bg-border space-y-2 text-xs">
+                  {/* Prospect Name */}
+                  <div className="flex justify-between items-center">
+                    <span className="text-text-muted">Prospect:</span>
+                    <span className="font-bold text-text-primary">{prospectName}</span>
+                  </div>
+
+                  {/* Mail Address (Editable - default tanishqgt32@gmail.com) */}
+                  <div className="flex flex-col gap-1 pt-1.5 border-t border-bg-border/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted flex items-center gap-1">
+                        <Mail className="w-3 h-3 text-sky-400" /> Mail Address:
+                      </span>
+                      {!isEditingEmail ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sky-300 font-semibold truncate max-w-[200px]" title={prospectEmail}>
+                            {prospectEmail}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmailInput(prospectEmail)
+                              setIsEditingEmail(true)
+                            }}
+                            className="text-3xs text-violet-400 hover:text-violet-300 underline font-semibold"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleSaveEmail}
+                            className="text-3xs px-2 py-0.5 rounded bg-violet-600 hover:bg-violet-500 text-white font-semibold"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmailInput(prospectEmail)
+                              setIsEditingEmail(false)
+                            }}
+                            className="text-3xs text-text-muted hover:text-text-primary px-1"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {isEditingEmail && (
+                      <input
+                        type="email"
+                        value={emailInput}
+                        onChange={(e) => setEmailInput(e.target.value)}
+                        placeholder="e.g. tanishqgt32@gmail.com"
+                        className="w-full text-xs font-mono bg-bg-card border border-violet-500/50 rounded px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-violet-400"
+                        autoFocus
+                      />
+                    )}
+                  </div>
+
+                  {/* Phone Number (Editable) */}
+                  <div className="flex flex-col gap-1 pt-1.5 border-t border-bg-border/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted flex items-center gap-1">
+                        <Smartphone className="w-3 h-3 text-violet-400" /> Phone Number:
+                      </span>
+                      {!isEditingPhone ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-violet-300 font-semibold">{prospectPhone}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPhoneInput(prospectPhone)
+                              setIsEditingPhone(true)
+                            }}
+                            className="text-3xs text-violet-400 hover:text-violet-300 underline font-semibold"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleSavePhone}
+                            className="text-3xs px-2 py-0.5 rounded bg-violet-600 hover:bg-violet-500 text-white font-semibold"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPhoneInput(prospectPhone)
+                              setIsEditingPhone(false)
+                            }}
+                            className="text-3xs text-text-muted hover:text-text-primary px-1"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {isEditingPhone && (
+                      <input
+                        type="tel"
+                        value={phoneInput}
+                        onChange={(e) => setPhoneInput(e.target.value)}
+                        placeholder="e.g. +91 98201 44892"
+                        className="w-full text-xs font-mono bg-bg-card border border-violet-500/50 rounded px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-violet-400"
+                        autoFocus
+                      />
+                    )}
+                  </div>
+
+                  {/* Calendly Link */}
+                  <div className="flex flex-col gap-1.5 pt-1.5 border-t border-bg-border/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-emerald-400" /> Calendly Link:
+                      </span>
+                      {!isEditingCalendlyUrl ? (
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={customCalendlyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 underline text-2xs font-mono flex items-center gap-0.5 truncate max-w-[200px]"
+                            title={customCalendlyUrl}
+                          >
+                            {customCalendlyUrl.replace(/^https?:\/\//, '')} <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCalendlyUrlInput(customCalendlyUrl)
+                              setIsEditingCalendlyUrl(true)
+                            }}
+                            className="text-3xs text-violet-400 hover:text-violet-300 underline font-semibold"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const trimmed = calendlyUrlInput.trim()
+                              if (trimmed) {
+                                setCustomCalendlyLink(trimmed)
+                                setCustomCalendlyUrl(trimmed)
+                              }
+                              setIsEditingCalendlyUrl(false)
+                            }}
+                            className="text-3xs px-2 py-0.5 rounded bg-violet-600 hover:bg-violet-500 text-white font-semibold"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCalendlyUrlInput(customCalendlyUrl)
+                              setIsEditingCalendlyUrl(false)
+                            }}
+                            className="text-3xs text-text-muted hover:text-text-primary px-1"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {isEditingCalendlyUrl && (
+                      <input
+                        type="url"
+                        value={calendlyUrlInput}
+                        onChange={(e) => setCalendlyUrlInput(e.target.value)}
+                        placeholder="https://calendly.com/your-username/30min"
+                        className="w-full text-xs font-mono bg-bg-card border border-violet-500/50 rounded px-2.5 py-1.5 text-text-primary focus:outline-none focus:border-violet-400"
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Email Preview */}
+                {(calendlyDispatchChannel === 'EMAIL' || calendlyDispatchChannel === 'BOTH') && (
+                  <div className="p-3 bg-violet-500/5 border border-violet-500/25 rounded-lg space-y-1.5">
+                    <div className="flex items-center justify-between text-3xs">
+                      <span className="text-violet-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Mail className="w-3 h-3 text-sky-400" /> EMAIL PREVIEW
+                      </span>
+                      <span className="text-text-muted font-mono truncate max-w-[190px]">
+                        To: <strong className="text-sky-400">{prospectEmail}</strong>
+                      </span>
+                    </div>
+                    <div className="text-3xs text-text-muted pb-1 border-b border-violet-500/10 font-mono">
+                      Subject: <span className="text-text-secondary">Invitation: Strategy Call & Calendly Booking with {businessProfile.companyName || 'Callisto AI Solutions'}</span>
+                    </div>
+                    <div className="text-2xs text-text-secondary leading-relaxed space-y-1">
+                      <div>Hi <strong className="text-text-primary">{prospectName.split(' ')[0]}</strong>,</div>
+                      <div>
+                        This is <strong className="text-text-primary">{cleanAgentName}</strong> from{' '}
+                        <strong className="text-text-primary">{businessProfile.companyName || 'Callisto AI Solutions'}</strong>.
+                        As requested during our call, here is your direct link to book a time with our team:
+                      </div>
+                      <div className="p-1.5 bg-violet-500/10 rounded border border-violet-500/20 text-center my-1">
+                        <a href={customCalendlyUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 font-mono underline font-bold text-2xs inline-flex items-center gap-1">
+                          📅 {customCalendlyUrl.replace(/^https?:\/\//, '')} <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                      <div className="text-3xs text-text-muted">
+                        All meeting slots are pre-approved. Book now and we'll confirm within minutes! 🗓️
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SMS Preview */}
+                {calendlyDispatchChannel === 'SMS' && (
+                  <div className="p-3 bg-violet-500/5 border border-violet-500/20 rounded-lg space-y-1.5">
+                    <div className="flex items-center justify-between text-3xs">
+                      <span className="text-violet-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Smartphone className="w-3 h-3" /> SMS PREVIEW
+                      </span>
+                      <span className="text-text-muted font-mono">
+                        To: <strong className="text-violet-300">{prospectPhone}</strong>
+                      </span>
+                    </div>
+                    <div className="text-2xs text-text-secondary leading-relaxed">
+                      Hi <strong className="text-text-primary">{prospectName.split(' ')[0]}</strong>! This is{' '}
+                      <strong className="text-text-primary">{cleanAgentName}</strong> from{' '}
+                      <strong className="text-text-primary">{businessProfile.companyName || 'Callisto AI Solutions'}</strong>.
+                      As requested, here is a direct link to book a time with our team:
+                      {' '}<span className="text-blue-400 underline">{customCalendlyUrl.replace(/^https?:\/\//, '')}</span>
+                      {' '}All meeting slots are pre-approved. Book now and we'll confirm within minutes! 🗓️
+                    </div>
+                  </div>
+                )}
+
+                {/* What happens next */}
+                <div className="space-y-1.5 text-2xs text-text-muted">
+                  {[
+                    {
+                      icon: calendlyDispatchChannel === 'EMAIL' ? <Mail className="w-3 h-3 text-sky-400" /> : <Smartphone className="w-3 h-3 text-violet-400" />,
+                      text:
+                        calendlyDispatchChannel === 'EMAIL'
+                          ? `Email sent via Callisto Mail Gateway to ${prospectEmail}`
+                          : calendlyDispatchChannel === 'SMS'
+                          ? `SMS sent via Twilio to ${prospectPhone}`
+                          : `Dispatched to ${prospectEmail} & ${prospectPhone}`,
+                    },
+                    { icon: <Calendar className="w-3 h-3 text-emerald-400" />, text: 'Calendly shows your pre-configured available slots' },
+                    { icon: <UserCheck className="w-3 h-3 text-blue-400" />, text: 'Booking tracked in real-time in the Booking Tracker' },
+                    { icon: <AlertTriangle className="w-3 h-3 text-amber-400" />, text: 'If not booked in 24h, AI will auto follow-up' },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      {item.icon}
+                      <span>{item.text}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1 border-t border-bg-border">
+                  <button onClick={() => { setShowCalendlySmsModal(false); setCalendlySmsSent(false) }} className="btn-secondary text-xs">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendCalendlyDispatch}
+                    disabled={calendlySmsSending}
+                    className="btn-primary text-xs gap-1.5 font-semibold bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 border-violet-400 disabled:opacity-60 shadow-lg"
+                  >
+                    {calendlySmsSending ? (
+                      <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Sending...</>
+                    ) : calendlyDispatchChannel === 'EMAIL' ? (
+                      <><Mail className="w-3.5 h-3.5" /> Send Calendly Email Now</>
+                    ) : calendlyDispatchChannel === 'SMS' ? (
+                      <><Smartphone className="w-3.5 h-3.5" /> Send Calendly SMS Now</>
+                    ) : (
+                      <><Send className="w-3.5 h-3.5" /> Send via Mail & SMS Now</>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* Success State */
+              <div className="space-y-4 py-2">
+                <div className="flex flex-col items-center gap-3 py-3">
+                  <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+                    <CheckCircle className="w-7 h-7 text-emerald-400" />
+                  </div>
+                  <div className="text-center space-y-1">
+                    <div className="text-sm font-bold text-text-primary">
+                      {lastDispatchedChannel === 'EMAIL'
+                        ? 'Calendly Email Dispatched!'
+                        : lastDispatchedChannel === 'SMS'
+                        ? 'Calendly SMS Dispatched!'
+                        : 'Calendly Link Dispatched (Mail & SMS)!'}
+                    </div>
+                    <div className="text-2xs text-text-muted max-w-xs mx-auto">
+                      Booking link delivered to{' '}
+                      {lastDispatchedChannel === 'EMAIL' || lastDispatchedChannel === 'BOTH' ? (
+                        <strong className="text-sky-300">{prospectEmail}</strong>
+                      ) : null}
+                      {lastDispatchedChannel === 'BOTH' ? ' and ' : ''}
+                      {lastDispatchedChannel === 'SMS' || lastDispatchedChannel === 'BOTH' ? (
+                        <strong className="text-violet-300">{prospectPhone}</strong>
+                      ) : null}.
+                      Tracking is now active in the Calendly Booking Tracker.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-bg-secondary rounded-lg border border-bg-border space-y-1.5 text-2xs">
+                  <div className="flex justify-between">
+                    <span className="text-text-muted">Status:</span>
+                    <span className="text-emerald-400 font-bold font-mono">
+                      {lastDispatchedChannel === 'EMAIL'
+                        ? '✉️ EMAIL DELIVERED'
+                        : lastDispatchedChannel === 'SMS'
+                        ? '📱 SMS DELIVERED'
+                        : '🚀 EMAIL + SMS DELIVERED'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-muted">Recipient:</span>
+                    <span className="text-text-primary font-mono truncate max-w-[200px]">
+                      {lastDispatchedChannel === 'EMAIL' ? prospectEmail : lastDispatchedChannel === 'SMS' ? prospectPhone : `${prospectEmail} · ${prospectPhone}`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-muted">Auto Follow-up:</span>
+                    <span className="text-amber-400">If no booking in 24h → AI re-calls</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 flex-wrap">
+                  {calendlyBookings[0]?.previewUrl && (
+                    <a
+                      href={calendlyBookings[0].previewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-secondary text-xs gap-1.5 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 font-medium"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> View Sent Email
+                    </a>
+                  )}
+                  {(lastDispatchedChannel === 'EMAIL' || lastDispatchedChannel === 'BOTH') && (
+                    <a
+                      href={`mailto:${prospectEmail}?subject=${encodeURIComponent(`Invitation: Strategy Call & Calendly Booking with ${businessProfile.companyName || 'Callisto AI Solutions'}`)}&body=${encodeURIComponent(
+                        `Hi ${prospectName.split(' ')[0]},\n\nHere is your direct link to book a time with our team:\n${customCalendlyUrl}\n\nAll meeting slots are pre-approved. Book now and we'll confirm within minutes!`
+                      )}`}
+                      className="btn-secondary text-xs gap-1.5 text-sky-400 border-sky-500/30 hover:bg-sky-500/10"
+                    >
+                      <Mail className="w-3.5 h-3.5" /> Open in Mail App
+                    </a>
+                  )}
+                  <button
+                    onClick={() => { setShowCalendlySmsModal(false); setShowCalendlyTracker(true) }}
+                    className="btn-primary text-xs gap-1.5"
+                  >
+                    <Calendar className="w-3.5 h-3.5" /> View Booking Tracker
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Follow-up Re-call Scheduling Modal */}
+      {followUpModal.open && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="panel max-w-md w-full p-5 space-y-4 border border-amber-500/40 shadow-2xl animate-fade-in">
+            <div className="flex items-center justify-between border-b border-bg-border pb-3">
+              <div className="flex items-center gap-2">
+                <PhoneCall className="w-4 h-4 text-amber-400" />
+                <span className="text-sm font-bold text-text-primary">Schedule Follow-up Re-call</span>
+              </div>
+              <button onClick={() => setFollowUpModal({ open: false, recordId: '', leadName: '' })} className="text-text-muted hover:text-text-primary">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-2xs text-text-secondary leading-relaxed">
+              <strong className="text-text-primary">{followUpModal.leadName}</strong> has not booked via the Calendly link.
+              Schedule an AI re-call to follow up and re-send the booking link.
+            </p>
+
+            <div className="space-y-2">
+              {[
+                { slot: 'In 2 hours (today)', label: 'Quick Follow-up · In 2 Hours' },
+                { slot: 'Tomorrow, 10:00 AM IST', label: 'Tomorrow Morning · 10:00 AM IST' },
+                { slot: 'Tomorrow, 3:00 PM IST', label: 'Tomorrow Afternoon · 3:00 PM IST' },
+                { slot: 'Next Monday, 11:00 AM IST', label: 'Next Week · Monday 11:00 AM IST' },
+              ].map((opt, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    scheduleFollowUpCall(followUpModal.recordId, opt.slot)
+                    refreshCalendlyData()
+                    setFollowUpModal({ open: false, recordId: '', leadName: '' })
+                    showToast('success', 'Follow-up Scheduled', `AI will re-call ${followUpModal.leadName} — ${opt.slot}`)
+                  }}
+                  className="w-full text-left p-2.5 rounded bg-bg-card hover:bg-amber-500/10 border border-bg-border hover:border-amber-500/40 transition-colors flex items-center justify-between group"
+                >
+                  <span className="text-xs text-text-primary group-hover:text-amber-300">{opt.label}</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-text-muted group-hover:text-amber-400" />
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-bg-border text-3xs text-text-muted">
+              <span>Follow-up re-calls re-send the Calendly SMS automatically</span>
+              <button onClick={() => setFollowUpModal({ open: false, recordId: '', leadName: '' })} className="btn-secondary text-xs">Cancel</button>
             </div>
           </div>
         </div>

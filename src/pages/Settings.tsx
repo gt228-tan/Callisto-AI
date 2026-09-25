@@ -3,13 +3,15 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Settings, User, Building2, Brain, Volume2, Globe, Bell, Link2, Shield, CreditCard,
   CheckCircle, RefreshCw, Key, ExternalLink, Mail, MessageSquare, AlertCircle,
-  FileText, Upload, Trash2, CheckCircle2, PhoneCall, Server, Sparkles, Plus, Play, Check
+  FileText, Upload, Trash2, CheckCircle2, PhoneCall, Server, Sparkles, Plus, Play, Check,
+  Sun, Moon
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/contexts/AppContext'
 
 const tabs = [
   { id: 'profile',       label: 'Profile',        icon: <User className="w-3.5 h-3.5" /> },
+  { id: 'appearance',    label: 'Theme & Appearance', icon: <Sun className="w-3.5 h-3.5" /> },
   { id: 'company',       label: 'Company',        icon: <Building2 className="w-3.5 h-3.5" /> },
   { id: 'knowledge',     label: 'Business Knowledge & Docs', icon: <FileText className="w-3.5 h-3.5" /> },
   { id: 'ai',            label: 'AI Preferences', icon: <Brain className="w-3.5 h-3.5" /> },
@@ -40,7 +42,7 @@ function ToggleSwitch({ checked, onChange, id }: { checked: boolean; onChange: (
 
 export function SettingsPage() {
   const { showToast } = useToast()
-  const { language, setLanguage } = useAppContext()
+  const { language, setLanguage, theme, setTheme, toggleTheme } = useAppContext()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const tabParam = searchParams.get('tab')
@@ -165,29 +167,130 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="p-3 sm:p-4">
-      <div className="flex items-center gap-2 mb-3 sm:mb-4">
-        <Settings className="w-4 h-4 text-amber-400 shrink-0" />
-        <h1 className="text-sm font-bold text-text-primary">Settings</h1>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
+      <div className="flex items-center gap-2.5">
+        <Settings className="w-5 h-5 text-amber-400 shrink-0" />
+        <h1 className="text-lg font-bold text-text-primary">System Settings</h1>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
+      <div className="flex flex-col md:flex-row gap-5 sm:gap-6">
         {/* Sidebar tabs */}
-        <div className="w-full md:w-48 shrink-0 panel p-1.5 sm:p-2 h-fit flex md:flex-col overflow-x-auto md:overflow-x-visible gap-1 scrollbar-thin">
+        <div className="w-full md:w-56 shrink-0 panel p-2 sm:p-3 h-fit flex md:flex-col overflow-x-auto md:overflow-x-visible gap-1.5 scrollbar-thin">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`whitespace-nowrap shrink-0 md:shrink flex items-center gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded text-xs transition-colors ${activeTab === t.id ? 'bg-amber-500/10 text-amber-400 font-semibold border border-amber-500/30 md:border-transparent' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
+              className={`whitespace-nowrap shrink-0 md:shrink flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                activeTab === t.id
+                  ? 'bg-amber-500/15 text-amber-400 font-semibold border border-amber-500/40'
+                  : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
+              }`}
             >
-              {t.icon} <span className="text-xs">{t.label}</span>
+              {t.icon} <span>{t.label}</span>
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="flex-1 panel p-3.5 sm:p-6 space-y-5 min-h-96 min-w-0">
-          {/* 1. Profile */}
+        <div className="flex-1 panel p-5 sm:p-8 space-y-6 min-h-96 min-w-0">
+          {/* 1. Theme & Appearance */}
+          {activeTab === 'appearance' && (
+            <div className="space-y-6">
+              <div className="border-b border-bg-border pb-3">
+                <h2 className="text-base font-semibold text-text-primary">Theme & Visual Experience</h2>
+                <p className="text-xs text-text-muted mt-1">
+                  Customize the interface theme between high-contrast dark cockpit and executive daylight mode.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+                {/* Dark Mode Card */}
+                <div 
+                  onClick={() => {
+                    setTheme('dark')
+                    showToast('info', 'Dark Mode Activated', 'High-contrast nocturnal cockpit applied.')
+                  }}
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    theme === 'dark'
+                      ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10'
+                      : 'border-bg-border hover:border-text-muted/40 bg-bg-card'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Moon className="w-5 h-5 text-amber-400" />
+                      <span className="font-semibold text-sm text-text-primary">Deep Space (Dark)</span>
+                    </div>
+                    {theme === 'dark' && <CheckCircle2 className="w-4 h-4 text-amber-400" />}
+                  </div>
+                  <div className="bg-[#080c14] border border-[#1e293b] rounded-lg p-3 text-2xs space-y-1.5 mb-3">
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="font-mono text-amber-400">CALLISTO CORE</span>
+                      <span className="text-emerald-400 font-mono">NOMINAL</span>
+                    </div>
+                    <div className="h-1.5 bg-[#141d2e] rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 w-3/4"></div>
+                    </div>
+                    <p className="text-slate-400">High-contrast nocturnal cockpit tuned for deep telemetry sessions.</p>
+                  </div>
+                  <div className="text-xs text-text-muted">
+                    Jovian dark theme with cybernetic golden accents.
+                  </div>
+                </div>
+
+                {/* Light Mode Card */}
+                <div 
+                  onClick={() => {
+                    setTheme('light')
+                    showToast('info', 'Light Mode Activated', 'Crisp executive daylight mode applied.')
+                  }}
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    theme === 'light'
+                      ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10'
+                      : 'border-bg-border hover:border-text-muted/40 bg-bg-card'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Sun className="w-5 h-5 text-amber-500" />
+                      <span className="font-semibold text-sm text-text-primary">Executive Daylight (Light)</span>
+                    </div>
+                    {theme === 'light' && <CheckCircle2 className="w-4 h-4 text-amber-500" />}
+                  </div>
+                  <div className="bg-[#f8fafc] border border-[#cbd5e1] rounded-lg p-3 text-2xs space-y-1.5 mb-3">
+                    <div className="flex items-center justify-between text-slate-800">
+                      <span className="font-mono text-amber-600 font-bold">CALLISTO CORE</span>
+                      <span className="text-emerald-600 font-mono font-bold">ONLINE</span>
+                    </div>
+                    <div className="h-1.5 bg-[#e2e8f0] rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 w-3/4"></div>
+                    </div>
+                    <p className="text-slate-600">Crisp, luminous executive day mode with high contrast.</p>
+                  </div>
+                  <div className="text-xs text-text-muted">
+                    Crisp executive daytime interface with warm solar highlights.
+                  </div>
+                </div>
+              </div>
+
+              <div className="panel-card p-4 rounded-xl max-w-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold text-text-primary">Quick Navigation Toggle</div>
+                  <div className="text-2xs text-text-muted mt-0.5">Toggle themes anytime via the sun/moon icon on the top navigation bar.</div>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={toggleTheme} 
+                  className="btn-secondary text-xs flex items-center gap-2 py-1.5 px-3 self-start sm:self-auto"
+                >
+                  {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-amber-500" />}
+                  Switch to {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 2. Profile */}
           {activeTab === 'profile' && (
             <div className="space-y-4">
               <div className="text-sm font-semibold text-text-primary border-b border-bg-border pb-2">Profile</div>

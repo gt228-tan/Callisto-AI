@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Megaphone, Plus, Pause, Play, Eye, BarChart2, X, Check, Download,
   RotateCcw, Clock, Globe, PhoneCall, Upload, FileSpreadsheet, Users,
-  Search, Filter, ChevronDown, Sparkles, ExternalLink
+  Search, Filter, ChevronDown, Sparkles, ExternalLink, Link2
 } from 'lucide-react'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { MetricCard } from '@/components/ui/MetricCard'
@@ -19,6 +19,7 @@ import { exportLeadsToExcel, exportLeadsToCSV } from '@/lib/excelLeads'
 import { exportToCSV } from '@/lib/exportCsv'
 import { ImportLeadsModal } from '@/components/ui/ImportLeadsModal'
 import { SUPPORTED_LANGUAGES } from '@/lib/languages'
+import { syncActivityToCrm } from '@/services/crmService'
 
 const WIZARD_STEPS = ['Campaign Mode & Details', 'Select Leads', 'Voice Agent', 'Objectives', 'Schedule & Location', 'Review & Launch']
 
@@ -209,6 +210,27 @@ export function Campaigns() {
         >
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
+        <button
+          onClick={async () => {
+            try {
+              const res = await syncActivityToCrm({
+                type: 'CAMPAIGN_OUTREACH',
+                title: `Campaign: ${r.name}`,
+                prospectName: r.target,
+                company: `${r.leadIds?.length || r.leads} Leads Target`,
+                details: `Calls Made: ${r.calls}, Answered: ${r.answered}, Qualified: ${r.qualified}, Meetings: ${r.meetings}, Conversion: ${r.conversion}%`,
+                score: Math.round(r.conversion),
+              })
+              showToast('success', 'Synced to CRM', `"${r.name}" metrics pushed to ${res.crmName} Campaign records!`)
+            } catch {
+              showToast('error', 'Sync Failed', 'Could not sync campaign to CRM')
+            }
+          }}
+          className="btn-ghost p-1 hover:text-amber-400"
+          title="Sync Campaign Metrics to CRM"
+        >
+          <Link2 className="w-3.5 h-3.5 text-amber-400" />
+        </button>
         <button onClick={() => navigate('/analytics')} className="btn-ghost p-1 hover:text-amber-400" title="Analytics">
           <BarChart2 className="w-3.5 h-3.5" />
         </button>
@@ -255,21 +277,30 @@ export function Campaigns() {
   }, [selectedCampaignForDrawer, leadsList])
 
   return (
-    <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Megaphone className="w-4 h-4 text-amber-400 shrink-0" />
-          <h1 className="text-sm font-bold text-text-primary">{t('campaigns.title', 'Campaigns')}</h1>
-          <span className="text-2xs text-text-muted font-mono">({campaignList.length} total)</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-bg-border/60">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <Megaphone className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base sm:text-lg font-bold text-text-primary tracking-tight">{t('campaigns.title', 'Campaigns')}</h1>
+              <span className="text-xs text-text-muted font-mono">({campaignList.length} total)</span>
+            </div>
+            <p className="text-2xs text-text-muted font-mono hidden sm:block">
+              Multi-agent outbound dialing workflows, conversion metrics & CRM synchronization
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-2.5">
           {/* Export Dropdown */}
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(p => !p)}
-              className="btn-secondary text-xs gap-1.5 flex-1 sm:flex-initial justify-center"
+              className="btn-secondary text-xs py-2 px-3 gap-1.5 w-full justify-center font-medium"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export</span>
@@ -279,17 +310,17 @@ export function Campaigns() {
             {showExportMenu && (
               <>
                 <div className="fixed inset-0 z-20" onClick={() => setShowExportMenu(false)} />
-                <div className="absolute right-0 mt-1 w-48 bg-bg-card border border-bg-border rounded-xl shadow-2xl p-1 z-30 text-xs animate-fade-in space-y-1">
+                <div className="absolute right-0 mt-1.5 w-48 bg-bg-card border border-bg-border rounded-xl shadow-2xl p-1.5 z-30 text-xs animate-fade-in space-y-1">
                   <button
                     onClick={() => handleExportCampaigns('xlsx')}
-                    className="w-full text-left px-2.5 py-1.5 rounded hover:bg-bg-hover text-text-primary flex items-center gap-2"
+                    className="w-full text-left px-2.5 py-2 rounded hover:bg-bg-hover text-text-primary flex items-center gap-2 font-medium"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Export as Excel (.xlsx)</span>
                   </button>
                   <button
                     onClick={() => handleExportCampaigns('csv')}
-                    className="w-full text-left px-2.5 py-1.5 rounded hover:bg-bg-hover text-text-primary flex items-center gap-2"
+                    className="w-full text-left px-2.5 py-2 rounded hover:bg-bg-hover text-text-primary flex items-center gap-2 font-medium"
                   >
                     <Download className="w-3.5 h-3.5 text-info-bright" />
                     <span>Export as CSV (.csv)</span>
@@ -310,20 +341,23 @@ export function Campaigns() {
               }))
               setShowWizard(true)
             }}
-            className="btn-secondary text-xs gap-1.5 flex-1 sm:flex-initial justify-center border-amber-500/40 text-amber-400 bg-amber-500/10"
+            className="btn-secondary text-xs py-2 px-3 gap-1.5 justify-center border-amber-500/40 text-amber-400 bg-amber-500/10 font-medium"
           >
             <PhoneCall className="w-3.5 h-3.5" />
-            <span>AI Calling Only Campaign</span>
+            <span>AI Calling Only</span>
           </button>
 
-          <button onClick={() => setShowWizard(true)} className="btn-primary text-xs gap-1.5 flex-1 sm:flex-initial justify-center">
+          <button
+            onClick={() => setShowWizard(true)}
+            className="btn-primary text-xs py-2 px-3.5 gap-1.5 col-span-2 sm:col-span-1 justify-center font-semibold shadow-md shadow-amber-500/20"
+          >
             <Plus className="w-3.5 h-3.5" /> {t('campaigns.create', 'Create Campaign')}
           </button>
         </div>
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4">
         <MetricCard label={t('campaigns.active', 'Active')} value={active} accent />
         <MetricCard label={t('campaigns.scheduled', 'Scheduled')} value={scheduled} />
         <MetricCard label={t('campaigns.totalCalls', 'Total Calls')} value={totalCalls} />
